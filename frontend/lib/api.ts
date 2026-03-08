@@ -12,6 +12,14 @@ import {
   Task,
   CaseNote,
   Notification,
+  Evidence,
+  Deadline,
+  DiscoveryRequest,
+  TimeEntry,
+  Expense,
+  LegalResearchItem,
+  Communication,
+  JudgeProfile,
 } from "@/types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
@@ -439,6 +447,171 @@ export const api = {
     },
     markAllRead: async (): Promise<void> => {
       await apiFetch("/notifications/read-all", { method: "PUT" });
+    },
+  },
+
+  evidence: {
+    getByCase: async (caseId: string): Promise<Evidence[]> => {
+      return apiFetch<Evidence[]>(`/evidence/${caseId}`);
+    },
+    create: async (caseId: string, data: { title: string; evidence_type?: string; description?: string; exhibit_number?: string; source?: string; custodian?: string; date_collected?: string; location?: string; is_privileged?: boolean; privilege_type?: string; status?: string; notes?: string }): Promise<Evidence> => {
+      return apiFetch<Evidence>(`/evidence/${caseId}`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
+    },
+    update: async (evidenceId: string, data: Record<string, unknown>): Promise<Evidence> => {
+      return apiFetch<Evidence>(`/evidence/${evidenceId}`, {
+        method: "PUT",
+        body: JSON.stringify(data),
+      });
+    },
+    delete: async (evidenceId: string): Promise<void> => {
+      await apiFetch(`/evidence/${evidenceId}`, { method: "DELETE" });
+    },
+  },
+
+  deadlines: {
+    getByCase: async (caseId: string): Promise<Deadline[]> => {
+      return apiFetch<Deadline[]>(`/deadlines/${caseId}`);
+    },
+    create: async (caseId: string, data: { title: string; deadline_type?: string; due_date: string; description?: string; reminder_date?: string; priority?: string; court_rule?: string; jurisdiction?: string; assignee?: string; notes?: string }): Promise<Deadline> => {
+      return apiFetch<Deadline>(`/deadlines/${caseId}`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
+    },
+    update: async (deadlineId: string, data: Record<string, unknown>): Promise<Deadline> => {
+      return apiFetch<Deadline>(`/deadlines/${deadlineId}`, {
+        method: "PUT",
+        body: JSON.stringify(data),
+      });
+    },
+    delete: async (deadlineId: string): Promise<void> => {
+      await apiFetch(`/deadlines/${deadlineId}`, { method: "DELETE" });
+    },
+  },
+
+  discovery: {
+    getByCase: async (caseId: string): Promise<DiscoveryRequest[]> => {
+      return apiFetch<DiscoveryRequest[]>(`/discovery/${caseId}`);
+    },
+    create: async (caseId: string, data: { title: string; discovery_type?: string; direction?: string; served_to?: string; served_date?: string; due_date?: string; notes?: string }): Promise<DiscoveryRequest> => {
+      return apiFetch<DiscoveryRequest>(`/discovery/${caseId}`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
+    },
+    update: async (discoveryId: string, data: Record<string, unknown>): Promise<DiscoveryRequest> => {
+      return apiFetch<DiscoveryRequest>(`/discovery/${discoveryId}`, {
+        method: "PUT",
+        body: JSON.stringify(data),
+      });
+    },
+    delete: async (discoveryId: string): Promise<void> => {
+      await apiFetch(`/discovery/${discoveryId}`, { method: "DELETE" });
+    },
+  },
+
+  billing: {
+    getTimeEntries: async (caseId: string): Promise<TimeEntry[]> => {
+      return apiFetch<TimeEntry[]>(`/billing/time/${caseId}`);
+    },
+    createTimeEntry: async (caseId: string, data: { description: string; date: string; hours: number; activity_type?: string; rate?: number; is_billable?: boolean; notes?: string }): Promise<TimeEntry> => {
+      return apiFetch<TimeEntry>(`/billing/time/${caseId}`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
+    },
+    updateTimeEntry: async (entryId: string, data: Record<string, unknown>): Promise<TimeEntry> => {
+      return apiFetch<TimeEntry>(`/billing/time/${entryId}`, {
+        method: "PUT",
+        body: JSON.stringify(data),
+      });
+    },
+    deleteTimeEntry: async (entryId: string): Promise<void> => {
+      await apiFetch(`/billing/time/${entryId}`, { method: "DELETE" });
+    },
+    getExpenses: async (caseId: string): Promise<Expense[]> => {
+      return apiFetch<Expense[]>(`/billing/expenses/${caseId}`);
+    },
+    createExpense: async (caseId: string, data: { description: string; expense_type?: string; amount: number; date: string; vendor?: string; is_billable?: boolean; notes?: string }): Promise<Expense> => {
+      return apiFetch<Expense>(`/billing/expenses/${caseId}`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
+    },
+    updateExpense: async (expenseId: string, data: Record<string, unknown>): Promise<Expense> => {
+      return apiFetch<Expense>(`/billing/expenses/${expenseId}`, {
+        method: "PUT",
+        body: JSON.stringify(data),
+      });
+    },
+    deleteExpense: async (expenseId: string): Promise<void> => {
+      await apiFetch(`/billing/expenses/${expenseId}`, { method: "DELETE" });
+    },
+  },
+
+  research: {
+    getByCase: async (caseId: string): Promise<LegalResearchItem[]> => {
+      return apiFetch<LegalResearchItem[]>(`/research/${caseId}`);
+    },
+    create: async (caseId: string, data: { title: string; research_type?: string; query?: string; summary?: string; citation?: string; court_name?: string; decision_date?: string; relevance?: string; key_points?: string; is_favorable?: boolean; notes?: string }): Promise<LegalResearchItem> => {
+      return apiFetch<LegalResearchItem>(`/research/${caseId}`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
+    },
+    update: async (researchId: string, data: Record<string, unknown>): Promise<LegalResearchItem> => {
+      return apiFetch<LegalResearchItem>(`/research/${researchId}`, {
+        method: "PUT",
+        body: JSON.stringify(data),
+      });
+    },
+    delete: async (researchId: string): Promise<void> => {
+      await apiFetch(`/research/${researchId}`, { method: "DELETE" });
+    },
+  },
+
+  communications: {
+    getByCase: async (caseId: string): Promise<Communication[]> => {
+      return apiFetch<Communication[]>(`/communications/${caseId}`);
+    },
+    create: async (caseId: string, data: { comm_type?: string; direction?: string; subject?: string; contact_name?: string; contact_role?: string; comm_date: string; summary?: string; follow_up_date?: string; is_privileged?: boolean; notes?: string }): Promise<Communication> => {
+      return apiFetch<Communication>(`/communications/${caseId}`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
+    },
+    update: async (commId: string, data: Record<string, unknown>): Promise<Communication> => {
+      return apiFetch<Communication>(`/communications/${commId}`, {
+        method: "PUT",
+        body: JSON.stringify(data),
+      });
+    },
+    delete: async (commId: string): Promise<void> => {
+      await apiFetch(`/communications/${commId}`, { method: "DELETE" });
+    },
+  },
+
+  judges: {
+    getAll: async (): Promise<JudgeProfile[]> => {
+      return apiFetch<JudgeProfile[]>("/judges/");
+    },
+    create: async (data: { name: string; court?: string; bench?: string; specialization?: string; tenure_start?: string; ruling_tendencies?: string; motion_grant_rate?: number; temperament?: string; notes?: string }): Promise<JudgeProfile> => {
+      return apiFetch<JudgeProfile>("/judges/", {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
+    },
+    update: async (judgeId: string, data: Record<string, unknown>): Promise<JudgeProfile> => {
+      return apiFetch<JudgeProfile>(`/judges/${judgeId}`, {
+        method: "PUT",
+        body: JSON.stringify(data),
+      });
+    },
+    delete: async (judgeId: string): Promise<void> => {
+      await apiFetch(`/judges/${judgeId}`, { method: "DELETE" });
     },
   },
 };

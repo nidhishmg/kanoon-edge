@@ -17,6 +17,11 @@ import {
   Gavel,
   CheckSquare,
   StickyNote,
+  Shield,
+  CalendarClock,
+  Search,
+  BookOpen,
+  DollarSign,
 } from "lucide-react";
 import { CaseRoom } from "@/types";
 import { Button } from "@/components/ui/button";
@@ -32,6 +37,11 @@ import { TimelineTab } from "@/components/case-room/timeline-tab";
 import { HearingsTab } from "@/components/case-room/hearings-tab";
 import { TasksTab } from "@/components/case-room/tasks-tab";
 import { NotesTab } from "@/components/case-room/notes-tab";
+import { EvidenceTab } from "@/components/case-room/evidence-tab";
+import { DeadlinesTab } from "@/components/case-room/deadlines-tab";
+import { DiscoveryTab } from "@/components/case-room/discovery-tab";
+import { ResearchTab } from "@/components/case-room/research-tab";
+import { FinancialsTab } from "@/components/case-room/financials-tab";
 
 interface WorkspaceProps {
   caseRoom: CaseRoom;
@@ -40,10 +50,15 @@ interface WorkspaceProps {
 const tabItems = [
   { value: "overview", label: "Overview", icon: LayoutDashboard },
   { value: "documents", label: "Documents", icon: FileText },
+  { value: "evidence", label: "Evidence", icon: Shield },
   { value: "timeline", label: "Timeline", icon: Clock },
   { value: "hearings", label: "Hearings", icon: Gavel },
+  { value: "deadlines", label: "Deadlines", icon: CalendarClock },
   { value: "tasks", label: "Tasks", icon: CheckSquare },
+  { value: "discovery", label: "Discovery", icon: Search },
+  { value: "research", label: "Research", icon: BookOpen },
   { value: "notes", label: "Notes", icon: StickyNote },
+  { value: "financials", label: "Financials", icon: DollarSign },
   { value: "analysis", label: "Analysis", icon: Brain },
   { value: "draft", label: "Draft", icon: FileEdit },
   { value: "chat", label: "Chat", icon: MessageSquare },
@@ -124,17 +139,32 @@ export function CaseRoomWorkspace({ caseRoom }: WorkspaceProps) {
         <TabsContent value="documents">
           <DocumentsTab caseId={caseRoom.id} />
         </TabsContent>
+        <TabsContent value="evidence">
+          <EvidenceTab caseId={caseRoom.id} />
+        </TabsContent>
         <TabsContent value="timeline">
           <TimelineTab caseId={caseRoom.id} />
         </TabsContent>
         <TabsContent value="hearings">
           <HearingsTab caseId={caseRoom.id} />
         </TabsContent>
+        <TabsContent value="deadlines">
+          <DeadlinesTab caseId={caseRoom.id} />
+        </TabsContent>
         <TabsContent value="tasks">
           <TasksTab caseId={caseRoom.id} />
         </TabsContent>
+        <TabsContent value="discovery">
+          <DiscoveryTab caseId={caseRoom.id} />
+        </TabsContent>
+        <TabsContent value="research">
+          <ResearchTab caseId={caseRoom.id} />
+        </TabsContent>
         <TabsContent value="notes">
           <NotesTab caseId={caseRoom.id} />
+        </TabsContent>
+        <TabsContent value="financials">
+          <FinancialsTab caseId={caseRoom.id} />
         </TabsContent>
         <TabsContent value="analysis">
           <AnalysisTab caseId={caseRoom.id} />

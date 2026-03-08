@@ -16,6 +16,13 @@ from app.routers import (
     tasks_router,
     notes_router,
     notifications_router,
+    evidence_router,
+    deadlines_router,
+    discovery_router,
+    billing_router,
+    research_router,
+    communications_router,
+    judge_router,
 )
 from app.utils.seed import seed_dev_user
 
@@ -45,7 +52,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:3001", "http://localhost:3002"],
+    allow_origins=["http://localhost:3000", "http://localhost:3001", "http://localhost:3002", "http://localhost:3003"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -62,6 +69,13 @@ app.include_router(hearings_router.router, prefix="/api/hearings", tags=["Hearin
 app.include_router(tasks_router.router, prefix="/api/tasks", tags=["Tasks"])
 app.include_router(notes_router.router, prefix="/api/notes", tags=["Notes"])
 app.include_router(notifications_router.router, prefix="/api/notifications", tags=["Notifications"])
+app.include_router(evidence_router.router, prefix="/api/evidence", tags=["Evidence"])
+app.include_router(deadlines_router.router, prefix="/api/deadlines", tags=["Deadlines"])
+app.include_router(discovery_router.router, prefix="/api/discovery", tags=["Discovery"])
+app.include_router(billing_router.router, prefix="/api/billing", tags=["Billing"])
+app.include_router(research_router.router, prefix="/api/research", tags=["Research"])
+app.include_router(communications_router.router, prefix="/api/communications", tags=["Communications"])
+app.include_router(judge_router.router, prefix="/api/judges", tags=["Judges"])
 
 
 @app.get("/")

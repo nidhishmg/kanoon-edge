@@ -1,0 +1,124 @@
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
+from typing import List
+
+from app.database import get_db
+from app.models import User, Case, Evidence
+from app.schemas.evidence import EvidenceCreate, EvidenceUpdate, EvidenceResponse
+from app.utils.auth import get_current_user
+
+router = APIRouter()
+
+
+def _to_response(e: Evidence) -> EvidenceResponse:
+    return EvidenceResponse(
+        id=e.id,
+        title=e.title,
+        description=e.description,
+        evidenceType=e.evidence_type,
+        exhibitNumber=e.exhibit_number,
+        batesStart=e.bates_start,
+        batesEnd=e.bates_end,
+        source=e.source,
+        custodian=e.custodian,
+        dateCollected=e.date_collected,
+        dateReceived=e.date_received,
+        chainOfCustody=e.chain_of_custody,
+        location=e.location,
+        isPrivileged=e.is_privileged or False,
+        privilegeType=e.privilege_type,
+        admissibilityStatus=e.admissibility_status or "pending",
+        objectionDetails=e.objection_details,
+        linkedDocumentId=e.linked_document_id,
+        status=e.status or "collected",
+        notes=e.notes,
+        createdAt=e.created_at.strftime("%Y-%m-%dT%H:%M:%S") if e.created_at else "",
+        updatedAt=e.updated_at.strftime("%Y-%m-%dT%H:%M:%S") if e.updated_at else "",
+    )
+
+
+def _verify_case(db: Session, case_id: str, user_id: str) -> Case:
+    case = db.query(Case).filter(Case.id == case_id, Case.user_id == user_id).first()
+    if not case:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Case not found")
+    return case
+
+
+@router.get("/{case_id}", response_model=List[EvidenceResponse])
+async def list_evidence(
+    case_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _verify_case(db, case_id, current_user.id)
+    items = db.query(Evidence).filter(Evidence.case_id == case_id).order_by(Evidence.created_at.desc()).all()
+    return [_to_response(e) for e in items]
+
+
+@router.post("/{case_id}", response_model=EvidenceResponse, status_code=status.HTTP_201_CREATED)
+async def create_evidence(
+    case_id: str,
+    data: EvidenceCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _verify_case(db, case_id, current_user.id)
+    item = Evidence(
+        case_id=case_id,
+        user_id=current_user.id,
+        title=data.title,
+        description=data.description,
+        evidence_type=data.evidence_type,
+        exhibit_number=data.exhibit_number,
+        bates_start=data.bates_start,
+        bates_end=data.bates_end,
+        source=data.source,
+        custodian=data.custodian,
+        date_collected=data.date_collected,
+        date_received=data.date_received,
+        chain_of_custody=data.chain_of_custody,
+        location=data.location,
+        is_privileged=data.is_privileged,
+        privilege_type=data.privilege_type,
+        admissibility_status=data.admissibility_status,
+        objection_details=data.objection_details,
+        linked_document_id=data.linked_document_id,
+        status=data.status,
+        notes=data.notes,
+    )
+    db.add(item)
+    db.commit()
+    db.refresh(item)
+    return _to_response(item)
+
+
+@router.put("/{evidence_id}", response_model=EvidenceResponse)
+async def update_evidence(
+    evidence_id: str,
+    data: EvidenceUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    item = db.query(Evidence).filter(Evidence.id == evidence_id).first()
+    if not item:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Evidence not found")
+    _verify_case(db, item.case_id, current_user.id)
+    for field, value in data.model_dump(exclude_unset=True).items():
+        setattr(item, field, value)
+    db.commit()
+    db.refresh(item)
+    return _to_response(item)
+
+
+@router.delete("/{evidence_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_evidence(
+    evidence_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    item = db.query(Evidence).filter(Evidence.id == evidence_id).first()
+    if not item:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Evidence not found")
+    _verify_case(db, item.case_id, current_user.id)
+    db.delete(item)
+    db.commit()

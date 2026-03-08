@@ -240,3 +240,166 @@ export interface User {
   plan: "free" | "pro" | "enterprise";
   avatar?: string;
 }
+
+// ─── Evidence ────────────────────────────────────────────────
+
+export interface Evidence {
+  id: string;
+  title: string;
+  description?: string;
+  evidenceType: string;
+  exhibitNumber?: string;
+  batesStart?: string;
+  batesEnd?: string;
+  source?: string;
+  custodian?: string;
+  dateCollected?: string;
+  dateReceived?: string;
+  chainOfCustody?: string;
+  location?: string;
+  isPrivileged: boolean;
+  privilegeType?: string;
+  admissibilityStatus: string;
+  objectionDetails?: string;
+  linkedDocumentId?: string;
+  status: string;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ─── Deadlines ───────────────────────────────────────────────
+
+export interface Deadline {
+  id: string;
+  title: string;
+  description?: string;
+  deadlineType: string;
+  dueDate: string;
+  reminderDate?: string;
+  priority: string;
+  status: string;
+  courtRule?: string;
+  jurisdiction?: string;
+  extensionDate?: string;
+  extensionReason?: string;
+  completedAt?: string;
+  assignee?: string;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ─── Discovery ───────────────────────────────────────────────
+
+export interface DiscoveryRequest {
+  id: string;
+  title: string;
+  discoveryType: string;
+  direction: string;
+  servedTo?: string;
+  servedDate?: string;
+  dueDate?: string;
+  responseDate?: string;
+  status: string;
+  itemsJson?: string;
+  responseSummary?: string;
+  objections?: string;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ─── Time Tracking & Billing ─────────────────────────────────
+
+export interface TimeEntry {
+  id: string;
+  caseId: string;
+  description: string;
+  activityType?: string;
+  date: string;
+  hours: number;
+  rate: number;
+  amount: number;
+  isBillable: boolean;
+  isBilled: boolean;
+  status: string;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Expense {
+  id: string;
+  caseId: string;
+  description: string;
+  expenseType: string;
+  amount: number;
+  date: string;
+  vendor?: string;
+  isBillable: boolean;
+  isReimbursed: boolean;
+  status: string;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ─── Legal Research ──────────────────────────────────────────
+
+export interface LegalResearchItem {
+  id: string;
+  title: string;
+  researchType: string;
+  query?: string;
+  summary?: string;
+  citation?: string;
+  courtName?: string;
+  decisionDate?: string;
+  relevance: string;
+  status: string;
+  keyPoints?: string;
+  isFavorable?: boolean;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ─── Communications ─────────────────────────────────────────
+
+export interface Communication {
+  id: string;
+  commType: string;
+  direction: string;
+  subject?: string;
+  contactName?: string;
+  contactRole?: string;
+  commDate: string;
+  summary?: string;
+  followUpDate?: string;
+  followUpDone: boolean;
+  linkedDocumentId?: string;
+  isPrivileged: boolean;
+  notes?: string;
+  createdAt: string;
+}
+
+// ─── Judge Profiles ─────────────────────────────────────────
+
+export interface JudgeProfile {
+  id: string;
+  name: string;
+  court?: string;
+  bench?: string;
+  specialization?: string;
+  tenureStart?: string;
+  rulingTendencies?: string;
+  motionGrantRate?: number;
+  avgSentenceSeverity?: string;
+  preferredArguments?: string;
+  notableRulings?: string;
+  temperament?: string;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}

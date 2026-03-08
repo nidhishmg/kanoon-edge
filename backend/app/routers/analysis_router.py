@@ -93,11 +93,13 @@ async def run_analysis(
         created.append(ar)
 
     # Auto timeline event
+    from datetime import datetime, timezone
     event = TimelineEvent(
         case_id=case_id,
         event_type="analysis",
         title=f"AI Analysis completed — {len(created)} findings",
         description=f"Found {sum(1 for f in findings if f.get('severity') == 'high')} high severity issues",
+        event_date=datetime.now(timezone.utc).strftime("%Y-%m-%d"),
         auto_generated=True,
     )
     db.add(event)

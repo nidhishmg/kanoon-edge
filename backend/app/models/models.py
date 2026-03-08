@@ -80,6 +80,13 @@ class Case(Base):
     hearings = relationship("Hearing", back_populates="case", cascade="all, delete-orphan")
     tasks = relationship("Task", back_populates="case", cascade="all, delete-orphan")
     notes = relationship("CaseNote", back_populates="case", cascade="all, delete-orphan")
+    evidence_items = relationship("Evidence", back_populates="case", cascade="all, delete-orphan")
+    deadlines = relationship("Deadline", back_populates="case", cascade="all, delete-orphan")
+    discovery_requests = relationship("DiscoveryRequest", back_populates="case", cascade="all, delete-orphan")
+    time_entries = relationship("TimeEntry", back_populates="case", cascade="all, delete-orphan")
+    expenses = relationship("Expense", back_populates="case", cascade="all, delete-orphan")
+    legal_research = relationship("LegalResearch", back_populates="case", cascade="all, delete-orphan")
+    communications = relationship("Communication", back_populates="case", cascade="all, delete-orphan")
 
     __table_args__ = (
         Index("ix_cases_user_id", "user_id"),
@@ -344,3 +351,273 @@ class ChatMessage(Base):
     timestamp = Column(DateTime(timezone=True), default=utcnow)
 
     session = relationship("ChatSession", back_populates="messages")
+
+
+# ── Evidence ─────────────────────────────────────────────────
+
+class Evidence(Base):
+    __tablename__ = "evidence"
+
+    id = Column(String(36), primary_key=True, default=new_uuid)
+    case_id = Column(String(36), ForeignKey("cases.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    title = Column(String(500), nullable=False)
+    description = Column(Text, nullable=True)
+    evidence_type = Column(String(50), nullable=False)        # physical, documentary, testimonial, digital, forensic
+    exhibit_number = Column(String(100), nullable=True)
+    bates_start = Column(String(50), nullable=True)
+    bates_end = Column(String(50), nullable=True)
+    source = Column(String(255), nullable=True)
+    custodian = Column(String(255), nullable=True)
+    date_collected = Column(String(20), nullable=True)
+    date_received = Column(String(20), nullable=True)
+    chain_of_custody = Column(Text, nullable=True)            # JSON array of custody events
+    location = Column(String(500), nullable=True)
+    is_privileged = Column(Boolean, default=False)
+    privilege_type = Column(String(100), nullable=True)       # attorney-client, work-product, spousal
+    admissibility_status = Column(String(50), default="pending")  # admitted, objected, pending, excluded
+    objection_details = Column(Text, nullable=True)
+    linked_document_id = Column(String(36), nullable=True)
+    status = Column(String(50), default="collected")          # collected, reviewed, submitted, admitted, excluded
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=utcnow)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+    case = relationship("Case", back_populates="evidence_items")
+
+    __table_args__ = (
+        Index("ix_evidence_case_id", "case_id"),
+    )
+
+
+# ── Deadlines ────────────────────────────────────────────────
+
+class Deadline(Base):
+    __tablename__ = "deadlines"
+
+    id = Column(String(36), primary_key=True, default=new_uuid)
+    case_id = Column(String(36), ForeignKey("cases.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    title = Column(String(500), nullable=False)
+    description = Column(Text, nullable=True)
+    deadline_type = Column(String(50), nullable=False)        # filing, response, discovery, motion, appeal, statutory
+    due_date = Column(String(20), nullable=False)
+    reminder_date = Column(String(20), nullable=True)
+    priority = Column(String(20), default="medium")
+    status = Column(String(20), default="pending")            # pending, completed, extended, missed
+    court_rule = Column(String(255), nullable=True)
+    jurisdiction = Column(String(255), nullable=True)
+    extension_date = Column(String(20), nullable=True)
+    extension_reason = Column(Text, nullable=True)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+    assignee = Column(String(255), nullable=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=utcnow)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+    case = relationship("Case", back_populates="deadlines")
+
+    __table_args__ = (
+        Index("ix_deadlines_case_id", "case_id"),
+        Index("ix_deadlines_due_date", "due_date"),
+    )
+
+
+# ── Discovery Requests ──────────────────────────────────────
+
+class DiscoveryRequest(Base):
+    __tablename__ = "discovery_requests"
+
+    id = Column(String(36), primary_key=True, default=new_uuid)
+    case_id = Column(String(36), ForeignKey("cases.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    title = Column(String(500), nullable=False)
+    discovery_type = Column(String(50), nullable=False)       # interrogatory, rfp, rfa, deposition, subpoena
+    direction = Column(String(20), default="outgoing")        # outgoing, incoming
+    served_to = Column(String(255), nullable=True)
+    served_date = Column(String(20), nullable=True)
+    due_date = Column(String(20), nullable=True)
+    response_date = Column(String(20), nullable=True)
+    status = Column(String(50), default="draft")              # draft, served, responded, overdue, objected, completed
+    items_json = Column(Text, nullable=True)                  # JSON array of individual items
+    response_summary = Column(Text, nullable=True)
+    objections = Column(Text, nullable=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=utcnow)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+    case = relationship("Case", back_populates="discovery_requests")
+
+    __table_args__ = (
+        Index("ix_discovery_requests_case_id", "case_id"),
+    )
+
+
+# ── Time Entries ─────────────────────────────────────────────
+
+class TimeEntry(Base):
+    __tablename__ = "time_entries"
+
+    id = Column(String(36), primary_key=True, default=new_uuid)
+    case_id = Column(String(36), ForeignKey("cases.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    description = Column(Text, nullable=False)
+    activity_type = Column(String(50), nullable=True)         # research, drafting, court_appearance, meeting, travel, review
+    date = Column(String(20), nullable=False)
+    hours = Column(Float, nullable=False)
+    rate = Column(Float, default=0.0)
+    amount = Column(Float, default=0.0)
+    is_billable = Column(Boolean, default=True)
+    is_billed = Column(Boolean, default=False)
+    invoice_id = Column(String(36), nullable=True)
+    timer_start = Column(DateTime(timezone=True), nullable=True)
+    timer_end = Column(DateTime(timezone=True), nullable=True)
+    status = Column(String(20), default="draft")              # draft, submitted, approved, billed
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=utcnow)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+    case = relationship("Case", back_populates="time_entries")
+
+    __table_args__ = (
+        Index("ix_time_entries_case_id", "case_id"),
+        Index("ix_time_entries_user_id", "user_id"),
+    )
+
+
+# ── Expenses ─────────────────────────────────────────────────
+
+class Expense(Base):
+    __tablename__ = "expenses"
+
+    id = Column(String(36), primary_key=True, default=new_uuid)
+    case_id = Column(String(36), ForeignKey("cases.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    description = Column(Text, nullable=False)
+    expense_type = Column(String(50), nullable=False)         # filing_fee, courier, travel, printing, expert_fee, other
+    amount = Column(Float, nullable=False)
+    date = Column(String(20), nullable=False)
+    vendor = Column(String(255), nullable=True)
+    receipt_path = Column(Text, nullable=True)
+    is_billable = Column(Boolean, default=True)
+    is_reimbursed = Column(Boolean, default=False)
+    status = Column(String(20), default="pending")            # pending, approved, reimbursed, rejected
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=utcnow)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+    case = relationship("Case", back_populates="expenses")
+
+    __table_args__ = (
+        Index("ix_expenses_case_id", "case_id"),
+    )
+
+
+# ── Legal Research ───────────────────────────────────────────
+
+class LegalResearch(Base):
+    __tablename__ = "legal_research"
+
+    id = Column(String(36), primary_key=True, default=new_uuid)
+    case_id = Column(String(36), ForeignKey("cases.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    title = Column(String(500), nullable=False)
+    research_type = Column(String(50), nullable=False)        # case_law, statute, regulation, commentary, article
+    query = Column(Text, nullable=True)
+    summary = Column(Text, nullable=True)
+    citation = Column(String(500), nullable=True)
+    court_name = Column(String(255), nullable=True)
+    decision_date = Column(String(20), nullable=True)
+    relevance = Column(String(20), default="medium")          # high, medium, low
+    status = Column(String(20), default="found")              # found, reviewing, applied, discarded
+    key_points = Column(Text, nullable=True)                  # JSON array of key points
+    is_favorable = Column(Boolean, nullable=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=utcnow)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+    case = relationship("Case", back_populates="legal_research")
+
+    __table_args__ = (
+        Index("ix_legal_research_case_id", "case_id"),
+    )
+
+
+# ── Communications ───────────────────────────────────────────
+
+class Communication(Base):
+    __tablename__ = "communications"
+
+    id = Column(String(36), primary_key=True, default=new_uuid)
+    case_id = Column(String(36), ForeignKey("cases.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    comm_type = Column(String(50), nullable=False)            # email, phone, meeting, letter, court_filing
+    direction = Column(String(20), default="outgoing")        # incoming, outgoing
+    subject = Column(String(500), nullable=True)
+    contact_name = Column(String(255), nullable=True)
+    contact_role = Column(String(100), nullable=True)
+    comm_date = Column(String(20), nullable=False)
+    summary = Column(Text, nullable=True)
+    follow_up_date = Column(String(20), nullable=True)
+    follow_up_done = Column(Boolean, default=False)
+    linked_document_id = Column(String(36), nullable=True)
+    is_privileged = Column(Boolean, default=False)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=utcnow)
+
+    case = relationship("Case", back_populates="communications")
+
+    __table_args__ = (
+        Index("ix_communications_case_id", "case_id"),
+    )
+
+
+# ── Audit Log ────────────────────────────────────────────────
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+
+    id = Column(String(36), primary_key=True, default=new_uuid)
+    user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    case_id = Column(String(36), nullable=True)
+    action = Column(String(100), nullable=False)              # create, update, delete, view, export, login
+    entity_type = Column(String(100), nullable=True)          # case, document, evidence, hearing, etc.
+    entity_id = Column(String(36), nullable=True)
+    old_values = Column(Text, nullable=True)                  # JSON of previous values
+    new_values = Column(Text, nullable=True)                  # JSON of new values
+    ip_address = Column(String(45), nullable=True)
+    user_agent = Column(String(500), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=utcnow)
+
+    __table_args__ = (
+        Index("ix_audit_logs_user_id", "user_id"),
+        Index("ix_audit_logs_case_id", "case_id"),
+        Index("ix_audit_logs_action", "action"),
+    )
+
+
+# ── Judge Profiles ───────────────────────────────────────────
+
+class JudgeProfile(Base):
+    __tablename__ = "judge_profiles"
+
+    id = Column(String(36), primary_key=True, default=new_uuid)
+    user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    name = Column(String(255), nullable=False)
+    court = Column(String(255), nullable=True)
+    bench = Column(String(255), nullable=True)
+    specialization = Column(String(255), nullable=True)
+    tenure_start = Column(String(20), nullable=True)
+    ruling_tendencies = Column(Text, nullable=True)           # JSON of tendencies
+    motion_grant_rate = Column(Float, nullable=True)
+    avg_sentence_severity = Column(String(50), nullable=True)
+    preferred_arguments = Column(Text, nullable=True)         # JSON array
+    notable_rulings = Column(Text, nullable=True)             # JSON array of ruling summaries
+    temperament = Column(String(100), nullable=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=utcnow)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+    __table_args__ = (
+        Index("ix_judge_profiles_user_id", "user_id"),
+    )

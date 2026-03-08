@@ -92,11 +92,13 @@ async def upload_document(
     db.add(doc)
     db.flush()
     # Auto timeline event for document upload
+    from datetime import datetime, timezone
     event = TimelineEvent(
         case_id=case_id,
         event_type="document",
         title=f"Document uploaded: {safe_name}",
         description=f"Size: {size_str}",
+        event_date=datetime.now(timezone.utc).strftime("%Y-%m-%d"),
         auto_generated=True,
         linked_document_id=doc.id,
     )
