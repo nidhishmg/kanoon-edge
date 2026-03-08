@@ -182,6 +182,7 @@ export function CreateWizard({ onClose }: CreateWizardProps) {
   const router = useRouter();
   const [step, setStep] = useState(0);
   const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Step 1 — Case Info
   const caseForm = useForm<CaseInfoForm>({
@@ -267,6 +268,8 @@ export function CreateWizard({ onClose }: CreateWizardProps) {
 
   const handleCreate = async () => {
     setSubmitting(true);
+    setError(null);
+    console.log("Token present:", !!localStorage.getItem("kanoonedge_token"));
     try {
       const created = await api.caseRooms.create({
         title: caseValues.title,
@@ -293,7 +296,9 @@ export function CreateWizard({ onClose }: CreateWizardProps) {
       }
 
       router.push(`/dashboard/case-rooms/${created.id}`);
-    } catch {
+    } catch (err) {
+      console.error("Create case room error:", err);
+      setError(err instanceof Error ? err.message : "Failed to create case room");
       setSubmitting(false);
     }
   };
@@ -808,6 +813,14 @@ export function CreateWizard({ onClose }: CreateWizardProps) {
                 </motion.div>
               )}
             </AnimatePresence>
+
+            {/* Error display */}
+            {error && (
+              <div className="flex items-start gap-2 mt-4 p-3 rounded-lg bg-destructive/10 border border-destructive/20">
+                <AlertCircle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
+                <p className="text-sm text-destructive">{error}</p>
+              </div>
+            )}
 
             {/* Footer buttons */}
             <div className="flex items-center justify-between mt-8 pt-4 border-t border-border">

@@ -37,8 +37,8 @@ export default function LoginPage() {
 
   const handleGoogleLogin = async () => {
     // Google OAuth not implemented yet — use dev login
-    setEmail("user123");
-    setPassword("123");
+    setEmail("nidish@kanoonedge.in");
+    setPassword("K@noonEdge#2026!");
   };
 
   return (
@@ -148,11 +148,12 @@ export default function LoginPage() {
                 Email
               </label>
               <Input
-                type="text"
+                type="email"
                 placeholder="advocate@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
+                autoComplete="email"
               />
             </div>
             <div>
