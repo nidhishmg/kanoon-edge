@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     # File storage (local for dev, S3 for prod)
     UPLOAD_DIR: str = "uploads"
 
+    # OpenAI
+    OPENAI_API_KEY: str = ""
+    OPENAI_MODEL: str = "gpt-4o-mini"
+
     model_config = {"env_file": ".env", "extra": "ignore"}
 
 

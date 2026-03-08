@@ -11,6 +11,11 @@ from app.routers import (
     analysis_router,
     draft_router,
     chat_router,
+    timeline_router,
+    hearings_router,
+    tasks_router,
+    notes_router,
+    notifications_router,
 )
 from app.utils.seed import seed_dev_user
 
@@ -52,6 +57,11 @@ app.include_router(documents_router.router, prefix="/api/documents", tags=["Docu
 app.include_router(analysis_router.router, prefix="/api/analysis", tags=["Analysis"])
 app.include_router(draft_router.router, prefix="/api/drafts", tags=["Drafts"])
 app.include_router(chat_router.router, prefix="/api/chat", tags=["Chat"])
+app.include_router(timeline_router.router, prefix="/api/timeline", tags=["Timeline"])
+app.include_router(hearings_router.router, prefix="/api/hearings", tags=["Hearings"])
+app.include_router(tasks_router.router, prefix="/api/tasks", tags=["Tasks"])
+app.include_router(notes_router.router, prefix="/api/notes", tags=["Notes"])
+app.include_router(notifications_router.router, prefix="/api/notifications", tags=["Notifications"])
 
 
 @app.get("/")

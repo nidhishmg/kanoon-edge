@@ -13,6 +13,10 @@ import {
   MessageSquare,
   LayoutDashboard,
   FileEdit,
+  Clock,
+  Gavel,
+  CheckSquare,
+  StickyNote,
 } from "lucide-react";
 import { CaseRoom } from "@/types";
 import { Button } from "@/components/ui/button";
@@ -24,6 +28,10 @@ import { DocumentsTab } from "@/components/case-room/documents-tab";
 import { AnalysisTab } from "@/components/case-room/analysis-tab";
 import { DraftTab } from "@/components/case-room/draft-tab";
 import { ChatTab } from "@/components/case-room/chat-tab";
+import { TimelineTab } from "@/components/case-room/timeline-tab";
+import { HearingsTab } from "@/components/case-room/hearings-tab";
+import { TasksTab } from "@/components/case-room/tasks-tab";
+import { NotesTab } from "@/components/case-room/notes-tab";
 
 interface WorkspaceProps {
   caseRoom: CaseRoom;
@@ -32,6 +40,10 @@ interface WorkspaceProps {
 const tabItems = [
   { value: "overview", label: "Overview", icon: LayoutDashboard },
   { value: "documents", label: "Documents", icon: FileText },
+  { value: "timeline", label: "Timeline", icon: Clock },
+  { value: "hearings", label: "Hearings", icon: Gavel },
+  { value: "tasks", label: "Tasks", icon: CheckSquare },
+  { value: "notes", label: "Notes", icon: StickyNote },
   { value: "analysis", label: "Analysis", icon: Brain },
   { value: "draft", label: "Draft", icon: FileEdit },
   { value: "chat", label: "Chat", icon: MessageSquare },
@@ -111,6 +123,18 @@ export function CaseRoomWorkspace({ caseRoom }: WorkspaceProps) {
         </TabsContent>
         <TabsContent value="documents">
           <DocumentsTab caseId={caseRoom.id} />
+        </TabsContent>
+        <TabsContent value="timeline">
+          <TimelineTab caseId={caseRoom.id} />
+        </TabsContent>
+        <TabsContent value="hearings">
+          <HearingsTab caseId={caseRoom.id} />
+        </TabsContent>
+        <TabsContent value="tasks">
+          <TasksTab caseId={caseRoom.id} />
+        </TabsContent>
+        <TabsContent value="notes">
+          <NotesTab caseId={caseRoom.id} />
         </TabsContent>
         <TabsContent value="analysis">
           <AnalysisTab caseId={caseRoom.id} />

@@ -7,7 +7,7 @@ from typing import List, Optional
 
 from app.config import get_settings
 from app.database import get_db
-from app.models import User, Case, Document
+from app.models import User, Case, Document, DocumentChunk, TimelineEvent
 from app.schemas.documents import DocumentResponse
 from app.utils.auth import get_current_user
 
@@ -15,8 +15,12 @@ router = APIRouter()
 settings = get_settings()
 
 
-def _doc_to_response(doc: Document) -> DocumentResponse:
+def _doc_to_response(doc: Document, db: Session = None) -> DocumentResponse:
     upload_str = doc.upload_date.strftime("%Y-%m-%d") if doc.upload_date else ""
+    has_text = bool(doc.text_content)
+    chunk_count = 0
+    if db:
+        chunk_count = db.query(DocumentChunk).filter(DocumentChunk.document_id == doc.id).count()
     return DocumentResponse(
         id=doc.id,
         name=doc.name,
@@ -27,6 +31,8 @@ def _doc_to_response(doc: Document) -> DocumentResponse:
         pages=doc.pages or 0,
         documentCategory=doc.document_category,
         isMandatory=bool(doc.is_mandatory),
+        hasText=has_text,
+        chunkCount=chunk_count,
     )
 
 
@@ -41,7 +47,7 @@ async def list_documents(
     if not case:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Case not found")
     docs = db.query(Document).filter(Document.case_id == case_id).order_by(Document.upload_date.desc()).all()
-    return [_doc_to_response(d) for d in docs]
+    return [_doc_to_response(d, db) for d in docs]
 
 
 @router.post("/{case_id}/upload", response_model=DocumentResponse, status_code=status.HTTP_201_CREATED)
@@ -84,9 +90,20 @@ async def upload_document(
         pages=0,
     )
     db.add(doc)
+    db.flush()
+    # Auto timeline event for document upload
+    event = TimelineEvent(
+        case_id=case_id,
+        event_type="document",
+        title=f"Document uploaded: {safe_name}",
+        description=f"Size: {size_str}",
+        auto_generated=True,
+        linked_document_id=doc.id,
+    )
+    db.add(event)
     db.commit()
     db.refresh(doc)
-    return _doc_to_response(doc)
+    return _doc_to_response(doc, db)
 
 
 @router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)

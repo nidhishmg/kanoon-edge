@@ -7,6 +7,11 @@ import {
   DraftTemplate,
   User,
   Party,
+  TimelineEvent,
+  Hearing,
+  Task,
+  CaseNote,
+  Notification,
 } from "@/types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
@@ -69,6 +74,22 @@ interface BackendCaseRoom {
   createdAt: string;
   parties: Party[];
   venue: string;
+  filingDate?: string;
+  filingNumber?: string;
+  firNumber?: string;
+  policeStation?: string;
+  judgeName?: string;
+  courtNumber?: string;
+  applicableSections?: string[];
+  caseDescription?: string;
+  priority?: string;
+  clientName?: string;
+  clientPhone?: string;
+  clientEmail?: string;
+  opposingCounsel?: string;
+  hearingCount?: number;
+  taskCount?: number;
+  noteCount?: number;
 }
 
 function toCaseRoom(c: BackendCaseRoom): CaseRoom {
@@ -87,6 +108,22 @@ function toCaseRoom(c: BackendCaseRoom): CaseRoom {
     createdAt: c.createdAt,
     parties: c.parties || [],
     venue: c.venue || "",
+    filingDate: c.filingDate,
+    filingNumber: c.filingNumber,
+    firNumber: c.firNumber,
+    policeStation: c.policeStation,
+    judgeName: c.judgeName,
+    courtNumber: c.courtNumber,
+    applicableSections: c.applicableSections,
+    caseDescription: c.caseDescription,
+    priority: c.priority,
+    clientName: c.clientName,
+    clientPhone: c.clientPhone,
+    clientEmail: c.clientEmail,
+    opposingCounsel: c.opposingCounsel,
+    hearingCount: c.hearingCount,
+    taskCount: c.taskCount,
+    noteCount: c.noteCount,
   };
 }
 
@@ -224,7 +261,20 @@ export const api = {
       stage?: string;
       next_hearing?: string;
       venue?: string;
-      parties?: { name: string; role: string; notes?: string }[];
+      filing_date?: string;
+      filing_number?: string;
+      fir_number?: string;
+      police_station?: string;
+      judge_name?: string;
+      court_number?: string;
+      applicable_sections?: string[];
+      case_description?: string;
+      priority?: string;
+      client_name?: string;
+      client_phone?: string;
+      client_email?: string;
+      opposing_counsel?: string;
+      parties?: { name: string; role: string; notes?: string; party_type?: string; advocate_name?: string; bar_council_number?: string; contact_phone?: string; contact_email?: string; address?: string }[];
     }): Promise<CaseRoom> => {
       const data = await apiFetch<BackendCaseRoom>("/cases/", {
         method: "POST",
@@ -295,6 +345,100 @@ export const api = {
     },
     getSuggestedQuestions: async (): Promise<string[]> => {
       return apiFetch<string[]>("/chat/suggested-questions");
+    },
+  },
+
+  timeline: {
+    getByCase: async (caseId: string): Promise<TimelineEvent[]> => {
+      return apiFetch<TimelineEvent[]>(`/timeline/${caseId}`);
+    },
+    create: async (caseId: string, data: { event_type: string; title: string; description?: string; event_date?: string; status?: string }): Promise<TimelineEvent> => {
+      return apiFetch<TimelineEvent>(`/timeline/${caseId}`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
+    },
+    delete: async (eventId: string): Promise<void> => {
+      await apiFetch(`/timeline/${eventId}`, { method: "DELETE" });
+    },
+  },
+
+  hearings: {
+    getByCase: async (caseId: string): Promise<Hearing[]> => {
+      return apiFetch<Hearing[]>(`/hearings/${caseId}`);
+    },
+    create: async (caseId: string, data: { hearing_date: string; hearing_type?: string; judge_name?: string; court_number?: string; outcome?: string; next_date?: string; notes?: string }): Promise<Hearing> => {
+      return apiFetch<Hearing>(`/hearings/${caseId}`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
+    },
+    update: async (hearingId: string, data: Record<string, unknown>): Promise<Hearing> => {
+      return apiFetch<Hearing>(`/hearings/${hearingId}`, {
+        method: "PUT",
+        body: JSON.stringify(data),
+      });
+    },
+    delete: async (hearingId: string): Promise<void> => {
+      await apiFetch(`/hearings/${hearingId}`, { method: "DELETE" });
+    },
+  },
+
+  tasks: {
+    getByCase: async (caseId: string): Promise<Task[]> => {
+      return apiFetch<Task[]>(`/tasks/${caseId}`);
+    },
+    create: async (caseId: string, data: { title: string; description?: string; due_date?: string; priority?: string; assignee?: string; task_type?: string }): Promise<Task> => {
+      return apiFetch<Task>(`/tasks/${caseId}`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
+    },
+    update: async (taskId: string, data: Record<string, unknown>): Promise<Task> => {
+      return apiFetch<Task>(`/tasks/${taskId}`, {
+        method: "PUT",
+        body: JSON.stringify(data),
+      });
+    },
+    delete: async (taskId: string): Promise<void> => {
+      await apiFetch(`/tasks/${taskId}`, { method: "DELETE" });
+    },
+  },
+
+  notes: {
+    getByCase: async (caseId: string): Promise<CaseNote[]> => {
+      return apiFetch<CaseNote[]>(`/notes/${caseId}`);
+    },
+    create: async (caseId: string, data: { title?: string; content: string; note_type?: string; is_private?: boolean }): Promise<CaseNote> => {
+      return apiFetch<CaseNote>(`/notes/${caseId}`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
+    },
+    update: async (noteId: string, data: Record<string, unknown>): Promise<CaseNote> => {
+      return apiFetch<CaseNote>(`/notes/${noteId}`, {
+        method: "PUT",
+        body: JSON.stringify(data),
+      });
+    },
+    delete: async (noteId: string): Promise<void> => {
+      await apiFetch(`/notes/${noteId}`, { method: "DELETE" });
+    },
+  },
+
+  notifications: {
+    getAll: async (): Promise<Notification[]> => {
+      return apiFetch<Notification[]>("/notifications/");
+    },
+    getUnreadCount: async (): Promise<number> => {
+      const data = await apiFetch<{ count: number }>("/notifications/unread-count");
+      return data.count;
+    },
+    markRead: async (notificationId: string): Promise<void> => {
+      await apiFetch(`/notifications/${notificationId}/read`, { method: "PUT" });
+    },
+    markAllRead: async (): Promise<void> => {
+      await apiFetch("/notifications/read-all", { method: "PUT" });
     },
   },
 };

@@ -12,3 +12,5 @@ class DocumentResponse(BaseModel):
     pages: int
     documentCategory: Optional[str] = None
     isMandatory: bool = False
+    hasText: bool = False
+    chunkCount: int = 0

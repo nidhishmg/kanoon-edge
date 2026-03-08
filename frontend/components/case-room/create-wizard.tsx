@@ -95,6 +95,19 @@ const caseInfoSchema = z.object({
   caseType: z.string().min(1, "Select case type"),
   stage: z.string().min(1, "Select case stage"),
   nextHearing: z.string().min(1, "Set next hearing date"),
+  filingDate: z.string().optional(),
+  filingNumber: z.string().optional(),
+  firNumber: z.string().optional(),
+  policeStation: z.string().optional(),
+  judgeName: z.string().optional(),
+  courtNumber: z.string().optional(),
+  applicableSections: z.string().optional(),
+  caseDescription: z.string().optional(),
+  priority: z.string().optional(),
+  clientName: z.string().optional(),
+  clientPhone: z.string().optional(),
+  clientEmail: z.string().optional(),
+  opposingCounsel: z.string().optional(),
 });
 
 const partySchema = z.object({
@@ -182,12 +195,13 @@ export function CreateWizard({ onClose }: CreateWizardProps) {
   const router = useRouter();
   const [step, setStep] = useState(0);
   const [submitting, setSubmitting] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Step 1 — Case Info
   const caseForm = useForm<CaseInfoForm>({
     resolver: zodResolver(caseInfoSchema),
-    defaultValues: { title: "", caseNumber: "", court: "", caseType: "", stage: "", nextHearing: "" },
+    defaultValues: { title: "", caseNumber: "", court: "", caseType: "", stage: "", nextHearing: "", filingDate: "", filingNumber: "", firNumber: "", policeStation: "", judgeName: "", courtNumber: "", applicableSections: "", caseDescription: "", priority: "", clientName: "", clientPhone: "", clientEmail: "", opposingCounsel: "" },
   });
 
   // Step 2 — Parties
@@ -271,6 +285,9 @@ export function CreateWizard({ onClose }: CreateWizardProps) {
     setError(null);
     console.log("Token present:", !!localStorage.getItem("kanoonedge_token"));
     try {
+      const sectionsStr = caseValues.applicableSections?.trim();
+      const applicableSections = sectionsStr ? sectionsStr.split(",").map((s: string) => s.trim()).filter(Boolean) : undefined;
+
       const created = await api.caseRooms.create({
         title: caseValues.title,
         case_number: caseValues.caseNumber,
@@ -278,6 +295,19 @@ export function CreateWizard({ onClose }: CreateWizardProps) {
         case_type: caseValues.caseType,
         stage: caseValues.stage,
         next_hearing: caseValues.nextHearing,
+        filing_date: caseValues.filingDate || undefined,
+        filing_number: caseValues.filingNumber || undefined,
+        fir_number: caseValues.firNumber || undefined,
+        police_station: caseValues.policeStation || undefined,
+        judge_name: caseValues.judgeName || undefined,
+        court_number: caseValues.courtNumber || undefined,
+        applicable_sections: applicableSections,
+        case_description: caseValues.caseDescription || undefined,
+        priority: caseValues.priority || undefined,
+        client_name: caseValues.clientName || undefined,
+        client_phone: caseValues.clientPhone || undefined,
+        client_email: caseValues.clientEmail || undefined,
+        opposing_counsel: caseValues.opposingCounsel || undefined,
         parties: partiesValues
           .filter((p) => p.name)
           .map((p) => ({ name: p.name, role: p.role, notes: p.notes || "" })),
@@ -431,6 +461,117 @@ export function CreateWizard({ onClose }: CreateWizardProps) {
                       <p className="text-xs text-danger mt-1">{caseForm.formState.errors.nextHearing.message}</p>
                     )}
                   </div>
+
+                  {/* Advanced Fields Toggle */}
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowAdvanced(!showAdvanced)}
+                    className="w-full text-muted-foreground"
+                  >
+                    {showAdvanced ? "Hide" : "Show"} Advanced Details (Client, Filing, Sections)
+                  </Button>
+
+                  {showAdvanced && (
+                    <div className="space-y-4 pt-2 border-t border-border">
+                      {/* Client Info */}
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Client Information</p>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-xs text-muted-foreground mb-1">Client Name</label>
+                          <Input placeholder="e.g. Rahul Sharma" {...caseForm.register("clientName")} />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-muted-foreground mb-1">Client Phone</label>
+                          <Input placeholder="+91 98765 43210" {...caseForm.register("clientPhone")} />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-xs text-muted-foreground mb-1">Client Email</label>
+                          <Input type="email" placeholder="client@email.com" {...caseForm.register("clientEmail")} />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-muted-foreground mb-1">Opposing Counsel</label>
+                          <Input placeholder="Name of opposing counsel" {...caseForm.register("opposingCounsel")} />
+                        </div>
+                      </div>
+
+                      {/* Filing Info */}
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider pt-2">Filing & Court Details</p>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-xs text-muted-foreground mb-1">Filing Date</label>
+                          <Input type="date" {...caseForm.register("filingDate")} />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-muted-foreground mb-1">Filing Number</label>
+                          <Input placeholder="e.g. SC/123/2024" {...caseForm.register("filingNumber")} />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-xs text-muted-foreground mb-1">Judge Name</label>
+                          <Input placeholder="Hon'ble Justice..." {...caseForm.register("judgeName")} />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-muted-foreground mb-1">Court Number</label>
+                          <Input placeholder="e.g. Court 5" {...caseForm.register("courtNumber")} />
+                        </div>
+                      </div>
+
+                      {/* Criminal-specific fields */}
+                      {caseValues.caseType === "Criminal" && (
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-xs text-muted-foreground mb-1">FIR Number</label>
+                            <Input placeholder="e.g. FIR/123/2024" {...caseForm.register("firNumber")} />
+                          </div>
+                          <div>
+                            <label className="block text-xs text-muted-foreground mb-1">Police Station</label>
+                            <Input placeholder="e.g. Saket PS" {...caseForm.register("policeStation")} />
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Applicable Sections */}
+                      <div>
+                        <label className="block text-xs text-muted-foreground mb-1">
+                          Applicable Sections (comma-separated)
+                        </label>
+                        <Input
+                          placeholder="e.g. IPC 302, IPC 120B, CrPC 167(2)"
+                          {...caseForm.register("applicableSections")}
+                        />
+                      </div>
+
+                      {/* Priority & Description */}
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-xs text-muted-foreground mb-1">Priority</label>
+                          <select
+                            {...caseForm.register("priority")}
+                            className="w-full h-10 rounded-md border border-input bg-secondary px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                          >
+                            <option value="">Select priority</option>
+                            <option value="low">Low</option>
+                            <option value="medium">Medium</option>
+                            <option value="high">High</option>
+                            <option value="urgent">Urgent</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-xs text-muted-foreground mb-1">Case Description</label>
+                        <textarea
+                          {...caseForm.register("caseDescription")}
+                          placeholder="Brief description of the case..."
+                          className="w-full min-h-[80px] rounded-md border border-input bg-secondary px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring resize-none"
+                        />
+                      </div>
+                    </div>
+                  )}
                 </motion.div>
               )}
 

@@ -6,9 +6,10 @@ from sqlalchemy.orm import Session
 from typing import List
 
 from app.database import get_db
-from app.models import User, Case, ChatSession, ChatMessage
+from app.models import User, Case, ChatSession, ChatMessage, Document, DocumentChunk
 from app.schemas.chat import ChatRequest, ChatMessageResponse, Citation
 from app.utils.auth import get_current_user
+from app.utils.llm import chat_with_context
 
 router = APIRouter()
 
@@ -19,48 +20,6 @@ SUGGESTED_QUESTIONS = [
     "Are there any procedural violations?",
     "What precedents apply to this case?",
 ]
-
-
-def _simulate_ai_response(message: str) -> dict:
-    """Simulate AI chat response (to be replaced with RAG pipeline)."""
-    if "contradiction" in message.lower():
-        content = (
-            "I identified 2 key contradictions in the witness statements.\n\n"
-            "The primary contradiction relates to the timeline of events — the FIR states the incident "
-            "occurred at 10:30 PM, while the first witness statement places it at 8:45 PM. This 1 hour "
-            "45 minute gap significantly weakens the prosecution's narrative.\n\n"
-            "The second contradiction involves the description of the accused's clothing, which differs "
-            "between the FIR and the spot panchnama."
-        )
-        citations = [
-            {"document": "FIR_Copy_2024.pdf", "page": 3, "text": "Time of incident reported as 22:30 hours"},
-            {"document": "Witness_Statement_1.pdf", "page": 5, "text": "Witness observed events at approximately 8:45 PM"},
-        ]
-    elif "procedural" in message.lower() or "violation" in message.lower():
-        content = (
-            "I found a significant procedural violation: the charge sheet was filed 95 days after "
-            "the FIR, exceeding the 90-day statutory limit under Section 167(2) CrPC.\n\n"
-            "This creates an enforceable right to default bail. The Supreme Court in Hussainara Khatoon "
-            "established that this is a fundamental right that cannot be denied."
-        )
-        citations = [
-            {"document": "Charge_Sheet.pdf", "page": 1, "text": "Charge sheet filing date exceeds statutory period"},
-        ]
-    else:
-        content = (
-            "Based on my analysis of the case documents, the defense has several strong arguments "
-            "available.\n\n"
-            "The most compelling is the procedural violation in the charge sheet filing — it was submitted "
-            "95 days after the FIR, exceeding the 90-day statutory limit under Section 167(2) CrPC.\n\n"
-            "Additionally, the medical report supports an alternative theory of accidental injury rather "
-            "than assault, which directly contradicts the prosecution's case theory.\n\n"
-            "Would you like me to elaborate on any of these points?"
-        )
-        citations = [
-            {"document": "FIR_Copy_2024.pdf", "page": 3, "text": "Time of incident reported as 22:30 hours"},
-            {"document": "Witness_Statement_1.pdf", "page": 5, "text": "Witness observed events at approximately 8:45 PM"},
-        ]
-    return {"content": content, "citations": citations}
 
 
 def _get_or_create_session(db: Session, case_id: str) -> ChatSession:
@@ -134,14 +93,36 @@ async def send_message(
     )
     db.add(user_msg)
 
-    # Generate AI response (simulated)
-    ai_data = _simulate_ai_response(request.message)
+    # Gather document chunks for RAG context
+    docs = db.query(Document).filter(Document.case_id == case_id).all()
+    document_chunks = []
+    for doc in docs:
+        chunks = db.query(DocumentChunk).filter(DocumentChunk.document_id == doc.id).all()
+        for chunk in chunks[:5]:  # Limit chunks per doc
+            document_chunks.append(f"[{doc.name}] {chunk.content}")
+        # If no chunks, use text_content directly
+        if not chunks and doc.text_content:
+            document_chunks.append(f"[{doc.name}] {doc.text_content[:2000]}")
+
+    # Get chat history
+    prev_messages = db.query(ChatMessage).filter(
+        ChatMessage.session_id == session.id
+    ).order_by(ChatMessage.timestamp).all()
+    chat_history = [{"role": m.sender_type, "content": m.content} for m in prev_messages]
+
+    # Generate AI response (RAG with fallback)
+    ai_data = chat_with_context(
+        message=request.message,
+        case_title=case.title or "",
+        document_chunks=document_chunks,
+        chat_history=chat_history,
+    )
 
     ai_msg = ChatMessage(
         session_id=session.id,
         sender_type="assistant",
         content=ai_data["content"],
-        citations_json=json.dumps(ai_data["citations"]),
+        citations_json=json.dumps(ai_data["citations"]) if ai_data["citations"] else None,
     )
     db.add(ai_msg)
     db.commit()

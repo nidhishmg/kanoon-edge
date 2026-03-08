@@ -1,67 +1,15 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
+import json
 
 from app.database import get_db
-from app.models import User, Case, AnalysisResult
+from app.models import User, Case, Document, AnalysisResult, TimelineEvent
 from app.schemas.analysis import AnalysisResultResponse
 from app.utils.auth import get_current_user
+from app.utils.llm import analyze_case_documents
 
 router = APIRouter()
-
-# Simulated AI analysis results (to be replaced with real AI pipeline)
-SIMULATED_RESULTS = [
-    {
-        "result_type": "loophole",
-        "severity": "high",
-        "title": "Missing Mandatory Witness Signature on FIR",
-        "description": "The FIR document lacks the mandatory witness signature as required under Section 154 of CrPC. This is a procedural violation that can be challenged.",
-        "legal_basis": "Section 154 CrPC, Lalita Kumari vs. Govt. of UP (2014) 2 SCC 1",
-        "guidance": "Challenge the admissibility of the FIR citing procedural irregularity. File a motion to suppress.",
-        "document_ref": "FIR_Copy_2024.pdf",
-        "page": 3,
-    },
-    {
-        "result_type": "contradiction",
-        "severity": "high",
-        "title": "Timeline Discrepancy Between FIR and Witness Statement",
-        "description": "The FIR states the incident occurred at 10:30 PM while the primary witness places it at 8:45 PM. This 1 hour 45 minute gap weakens the prosecution's timeline.",
-        "legal_basis": "Section 145 Indian Evidence Act — Cross-examination as to previous statements",
-        "guidance": "Use this contradiction during cross-examination to undermine witness credibility.",
-        "document_ref": "Witness_Statement_1.pdf",
-        "page": 5,
-    },
-    {
-        "result_type": "loophole",
-        "severity": "medium",
-        "title": "Charge Sheet Filed Beyond Statutory Period",
-        "description": "The charge sheet was filed 95 days after the FIR, exceeding the 90-day statutory limit for cases under Section 302 IPC.",
-        "legal_basis": "Section 167(2) CrPC — Right to default bail",
-        "guidance": "File application for default bail as a matter of right under the Hussainara Khatoon precedent.",
-        "document_ref": "Charge_Sheet.pdf",
-        "page": 1,
-    },
-    {
-        "result_type": "argument",
-        "severity": "medium",
-        "title": "Medical Report Supports Alternative Theory",
-        "description": "The medical examiner's report describes injuries as 'consistent with lateral impact on rough surface', which supports an accidental fall theory.",
-        "legal_basis": "Section 45 Indian Evidence Act — Expert opinion",
-        "guidance": "Present the medical report as evidence supporting alternative cause of injury.",
-        "document_ref": "Medical_Report.pdf",
-        "page": 7,
-    },
-    {
-        "result_type": "gap",
-        "severity": "low",
-        "title": "No Independent Witness in Panchnama",
-        "description": "The spot panchnama was conducted without any independent witness, relying solely on police personnel.",
-        "legal_basis": "Section 100(4) CrPC — Requirement of independent witnesses",
-        "guidance": "Challenge the validity of the panchnama and all evidence derived from it.",
-        "document_ref": "FIR_Copy_2024.pdf",
-        "page": 3,
-    },
-]
 
 
 def _result_to_response(r: AnalysisResult) -> AnalysisResultResponse:
@@ -84,7 +32,6 @@ async def get_analysis(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Get AI analysis results for a case."""
     case = db.query(Case).filter(Case.id == case_id, Case.user_id == current_user.id).first()
     if not case:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Case not found")
@@ -98,20 +45,62 @@ async def run_analysis(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Trigger AI analysis for a case (simulated)."""
     case = db.query(Case).filter(Case.id == case_id, Case.user_id == current_user.id).first()
     if not case:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Case not found")
 
+    # Gather document texts
+    docs = db.query(Document).filter(Document.case_id == case_id).all()
+    doc_texts = []
+    for doc in docs:
+        if doc.text_content:
+            doc_texts.append({"name": doc.name, "text": doc.text_content})
+
+    applicable_sections = []
+    if case.applicable_sections:
+        try:
+            applicable_sections = json.loads(case.applicable_sections)
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    # Run AI analysis (with fallback)
+    findings = analyze_case_documents(
+        case_title=case.title or "",
+        case_type=case.case_type or "",
+        court=case.court or "",
+        document_texts=doc_texts,
+        applicable_sections=applicable_sections,
+    )
+
     # Clear previous results
     db.query(AnalysisResult).filter(AnalysisResult.case_id == case_id).delete()
 
-    # Insert simulated analysis results
+    # Insert findings
     created = []
-    for data in SIMULATED_RESULTS:
-        ar = AnalysisResult(case_id=case_id, **data)
+    for data in findings:
+        ar = AnalysisResult(
+            case_id=case_id,
+            result_type=data.get("result_type", "gap"),
+            severity=data.get("severity", "medium"),
+            title=data.get("title", ""),
+            description=data.get("description", ""),
+            legal_basis=data.get("legal_basis", ""),
+            guidance=data.get("guidance", ""),
+            document_ref=data.get("document_ref", ""),
+            page=data.get("page", 0),
+        )
         db.add(ar)
         created.append(ar)
+
+    # Auto timeline event
+    event = TimelineEvent(
+        case_id=case_id,
+        event_type="analysis",
+        title=f"AI Analysis completed — {len(created)} findings",
+        description=f"Found {sum(1 for f in findings if f.get('severity') == 'high')} high severity issues",
+        auto_generated=True,
+    )
+    db.add(event)
 
     db.commit()
     for ar in created:
