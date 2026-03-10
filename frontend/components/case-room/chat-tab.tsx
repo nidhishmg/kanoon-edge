@@ -28,8 +28,8 @@ export function ChatTab({ caseId }: ChatTabProps) {
   const { chatMessages, setChatMessages, addChatMessage } = useCaseRoomStore();
 
   const { data: suggestedQuestions } = useQuery({
-    queryKey: ["suggested-questions"],
-    queryFn: api.chat.getSuggestedQuestions,
+    queryKey: ["suggested-questions", caseId],
+    queryFn: () => api.chat.getSuggestedQuestions(caseId),
   });
 
   useQuery({

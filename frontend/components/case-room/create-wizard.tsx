@@ -1,15 +1,13 @@
 "use client";
 
-import { useState, useCallback, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import {
-  FileText,
   Users,
-  Upload,
   CheckCircle2,
   ChevronRight,
   ChevronLeft,
@@ -19,98 +17,63 @@ import {
   Scale,
   X,
   FolderOpen,
-  AlertCircle,
-  Circle,
+  Calendar,
+  ClipboardCheck,
+  AlertTriangle,
+  Shield,
+  Clock,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import type { CaseType, CaseStage, PartyRole } from "@/types";
+import type { CaseType, CaseStage, PartyRole, CourtLevel, LawyerSide, ChecklistValue, SectionClassification } from "@/types";
 import { api } from "@/lib/api";
-
-// ─── Required Document Configuration ────────────────────────
-
-interface RequiredDocConfig {
-  category: string;
-  label: string;
-  description: string;
-}
-
-const REQUIRED_DOCS_BY_TYPE: Record<string, RequiredDocConfig[]> = {
-  Criminal: [
-    { category: "FIR", label: "FIR (First Information Report)", description: "Copy of the registered FIR" },
-    { category: "Charge Sheet", label: "Charge Sheet", description: "Police charge sheet / challan" },
-    { category: "Witness Statement", label: "Witness Statement", description: "Statements of key witnesses" },
-    { category: "Court Order", label: "Court / Bail Order", description: "Any existing court or bail orders" },
-  ],
-  Civil: [
-    { category: "Petition", label: "Petition / Plaint", description: "Original petition or plaint filed" },
-    { category: "Written Arguments", label: "Written Arguments", description: "Written statement or arguments" },
-    { category: "Court Order", label: "Court Order", description: "Relevant court orders" },
-  ],
-  "Civil - Tax": [
-    { category: "Petition", label: "Petition / Plaint", description: "Original petition or plaint filed" },
-    { category: "Written Arguments", label: "Written Arguments", description: "Written statement or arguments" },
-    { category: "Court Order", label: "Court Order", description: "Relevant court orders" },
-  ],
-  "Civil - Property": [
-    { category: "Petition", label: "Petition / Plaint", description: "Original petition or plaint filed" },
-    { category: "Written Arguments", label: "Written Arguments", description: "Written statement or arguments" },
-    { category: "Court Order", label: "Court Order", description: "Relevant court orders" },
-  ],
-  Corporate: [
-    { category: "Contract", label: "Contract / Agreement", description: "Relevant contracts or agreements" },
-    { category: "Legal Notice", label: "Legal Notice", description: "Legal notices served or received" },
-    { category: "Written Arguments", label: "Written Arguments", description: "Written statement or arguments" },
-  ],
-  Family: [
-    { category: "Petition", label: "Petition", description: "Family court petition" },
-    { category: "Court Order", label: "Court Order", description: "Relevant court orders" },
-  ],
-  Property: [
-    { category: "Petition", label: "Petition / Plaint", description: "Original petition or plaint filed" },
-    { category: "Court Order", label: "Court Order", description: "Relevant court orders" },
-  ],
-};
-
-const STAGE_EXTRA_DOCS: Record<string, RequiredDocConfig[]> = {
-  "Bail Stage": [
-    { category: "Bail Application", label: "Bail Application", description: "Bail application filed" },
-  ],
-  Trial: [
-    { category: "Evidence", label: "Evidence Documents", description: "Documentary evidence for trial" },
-  ],
-  Appeal: [
-    { category: "Previous Judgment", label: "Previous Court Order / Judgment", description: "Judgment or order being appealed" },
-  ],
-};
 
 // ─── Schemas ─────────────────────────────────────────────────
 
-const caseInfoSchema = z.object({
+const step1Schema = z.object({
   title: z.string().min(3, "Case title is required"),
-  caseNumber: z.string().min(2, "Case number is required"),
+  caseNumber: z.string().optional(),
   court: z.string().min(2, "Court name is required"),
   caseType: z.string().min(1, "Select case type"),
   stage: z.string().min(1, "Select case stage"),
-  nextHearing: z.string().min(1, "Set next hearing date"),
-  filingDate: z.string().optional(),
-  filingNumber: z.string().optional(),
-  firNumber: z.string().optional(),
-  policeStation: z.string().optional(),
-  judgeName: z.string().optional(),
-  courtNumber: z.string().optional(),
-  applicableSections: z.string().optional(),
-  caseDescription: z.string().optional(),
-  priority: z.string().optional(),
+  courtLevel: z.string().optional(),
+  lawyerSide: z.string().optional(),
   clientName: z.string().optional(),
   clientPhone: z.string().optional(),
   clientEmail: z.string().optional(),
   opposingCounsel: z.string().optional(),
+  caseDescription: z.string().optional(),
+  priority: z.string().optional(),
+  judgeName: z.string().optional(),
+  courtNumber: z.string().optional(),
 });
 
-const partySchema = z.object({
+const step2Schema = z.object({
+  incidentDate: z.string().optional(),
+  firDate: z.string().optional(),
+  firNumber: z.string().optional(),
+  policeStation: z.string().optional(),
+  arrestDate: z.string().optional(),
+  inCustody: z.boolean().optional(),
+  custodyStartDate: z.string().optional(),
+  chargeSheetDate: z.string().optional(),
+  nextHearing: z.string().min(1, "Next hearing date is required"),
+  hearingPurpose: z.string().optional(),
+  filingDate: z.string().optional(),
+  filingNumber: z.string().optional(),
+});
+
+const step3Schema = z.object({
+  checklist41aNotice: z.string().optional(),
+  checklistGroundsOfArrest: z.string().optional(),
+  checklistMagistrate24hrs: z.string().optional(),
+  checklistRemandCaseDiary: z.string().optional(),
+  checklistIndependentWitness: z.string().optional(),
+});
+
+const step4Schema = z.object({
   parties: z
     .array(
       z.object({
@@ -120,31 +83,56 @@ const partySchema = z.object({
       })
     )
     .min(1, "Add at least one party"),
+  applicableSections: z.string().optional(),
 });
 
-type CaseInfoForm = z.infer<typeof caseInfoSchema>;
-type PartiesForm = z.infer<typeof partySchema>;
+type Step1Form = z.infer<typeof step1Schema>;
+type Step2Form = z.infer<typeof step2Schema>;
+type Step3Form = z.infer<typeof step3Schema>;
+type Step4Form = z.infer<typeof step4Schema>;
 
-const CASE_TYPES: CaseType[] = ["Criminal", "Civil", "Civil - Tax", "Civil - Property", "Corporate", "Family", "Property", "Other"];
-const CASE_STAGES: CaseStage[] = ["Investigation", "Bail Stage", "Evidence", "Arguments", "Trial", "Mediation", "Discovery", "Appeal", "Judgment Pending"];
+const CASE_TYPES: CaseType[] = ["Criminal", "Civil", "Civil - Tax", "Civil - Property", "Corporate", "Family", "Property", "Bail", "Writ", "Labour", "Other"];
+const CASE_STAGES: CaseStage[] = ["Investigation", "Pre-Arrest", "Bail Stage", "Bail", "Charge Framing", "Evidence", "Arguments", "Trial", "Mediation", "Discovery", "Appeal", "Judgment Pending"];
 const PARTY_ROLES: PartyRole[] = ["Accused", "Petitioner", "Respondent", "Complainant", "Witness", "Lawyer"];
+const COURT_LEVELS: CourtLevel[] = ["Magistrate", "Sessions", "High Court", "Supreme Court", "Tribunal", "Other"];
+const LAWYER_SIDES: LawyerSide[] = ["defence", "prosecution", "petitioner", "respondent"];
+
+// ─── Date calculation helpers ────────────────────────────────
+
+function daysBetween(dateA: string, dateB: string): number | null {
+  if (!dateA || !dateB) return null;
+  const a = new Date(dateA);
+  const b = new Date(dateB);
+  if (isNaN(a.getTime()) || isNaN(b.getTime())) return null;
+  return Math.round((b.getTime() - a.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+function daysFromToday(dateStr: string): number | null {
+  if (!dateStr) return null;
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Math.round((d.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+}
 
 // ─── Progress Tracker ────────────────────────────────────────
 
 const STEPS = [
-  { id: 0, label: "Case Info", icon: FileText },
-  { id: 1, label: "Parties", icon: Users },
-  { id: 2, label: "Documents", icon: Upload },
-  { id: 3, label: "Review", icon: CheckCircle2 },
+  { id: 0, label: "Case Identity", icon: Scale },
+  { id: 1, label: "Dates", icon: Calendar },
+  { id: 2, label: "Checklist", icon: ClipboardCheck },
+  { id: 3, label: "Parties & Sections", icon: Users },
 ] as const;
 
-function StepTracker({ current }: { current: number }) {
+function StepTracker({ current, isCriminal }: { current: number; isCriminal: boolean }) {
   return (
     <div className="flex items-center justify-center gap-0 mb-8">
       {STEPS.map((step, i) => {
+        if (i === 2 && !isCriminal) return null;
         const Icon = step.icon;
         const isActive = i === current;
-        const isComplete = i < current;
+        const isComplete = i < current || (i === 2 && !isCriminal && current >= 3);
         return (
           <div key={step.id} className="flex items-center">
             <div className="flex flex-col items-center gap-1.5">
@@ -157,30 +145,54 @@ function StepTracker({ current }: { current: number }) {
                     : "bg-card border border-border text-muted-foreground"
                 }`}
               >
-                {isComplete ? (
-                  <CheckCircle2 className="w-5 h-5" />
-                ) : (
-                  <Icon className="w-4 h-4" />
-                )}
+                {isComplete ? <CheckCircle2 className="w-5 h-5" /> : <Icon className="w-4 h-4" />}
               </div>
-              <span
-                className={`text-xs font-medium whitespace-nowrap ${
-                  isActive ? "text-primary" : isComplete ? "text-foreground" : "text-muted-foreground"
-                }`}
-              >
+              <span className={`text-xs font-medium whitespace-nowrap ${isActive ? "text-primary" : isComplete ? "text-foreground" : "text-muted-foreground"}`}>
                 {step.label}
               </span>
             </div>
-            {i < STEPS.length - 1 && (
-              <div
-                className={`w-16 sm:w-24 h-[2px] mx-2 mb-5 transition-colors duration-300 ${
-                  isComplete ? "bg-primary" : "bg-border"
-                }`}
-              />
+            {i < STEPS.length - 1 && !(i === 1 && !isCriminal) && !(i === 2 && !isCriminal) && (
+              <div className={`w-12 sm:w-20 h-[2px] mx-2 mb-5 transition-colors duration-300 ${isComplete ? "bg-primary" : "bg-border"}`} />
             )}
           </div>
         );
       })}
+    </div>
+  );
+}
+
+// ─── Checklist Item Component ────────────────────────────────
+
+function ChecklistItem({ label, description, value, onChange }: {
+  label: string;
+  description: string;
+  value: ChecklistValue | undefined;
+  onChange: (v: ChecklistValue) => void;
+}) {
+  const options: { val: ChecklistValue; label: string; color: string }[] = [
+    { val: "yes", label: "Yes", color: "bg-green-500/20 text-green-400 border-green-500/30" },
+    { val: "no", label: "No", color: "bg-red-500/20 text-red-400 border-red-500/30" },
+    { val: "unknown", label: "Don't Know", color: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30" },
+  ];
+
+  return (
+    <div className="rounded-lg border border-border p-4 space-y-2">
+      <p className="text-sm font-medium text-foreground">{label}</p>
+      <p className="text-xs text-muted-foreground">{description}</p>
+      <div className="flex gap-2 mt-2">
+        {options.map((opt) => (
+          <Button
+            key={opt.val}
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => onChange(opt.val)}
+            className={`text-xs ${value === opt.val ? opt.color + " border" : ""}`}
+          >
+            {opt.label}
+          </Button>
+        ))}
+      </div>
     </div>
   );
 }
@@ -195,135 +207,135 @@ export function CreateWizard({ onClose }: CreateWizardProps) {
   const router = useRouter();
   const [step, setStep] = useState(0);
   const [submitting, setSubmitting] = useState(false);
-  const [showAdvanced, setShowAdvanced] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sectionClassifications, setSectionClassifications] = useState<SectionClassification[]>([]);
 
-  // Step 1 — Case Info
-  const caseForm = useForm<CaseInfoForm>({
-    resolver: zodResolver(caseInfoSchema),
-    defaultValues: { title: "", caseNumber: "", court: "", caseType: "", stage: "", nextHearing: "", filingDate: "", filingNumber: "", firNumber: "", policeStation: "", judgeName: "", courtNumber: "", applicableSections: "", caseDescription: "", priority: "", clientName: "", clientPhone: "", clientEmail: "", opposingCounsel: "" },
+  // Step 1 — Case Identity
+  const step1Form = useForm<Step1Form>({
+    resolver: zodResolver(step1Schema),
+    defaultValues: { title: "", caseNumber: "", court: "", caseType: "", stage: "", courtLevel: "", lawyerSide: "", clientName: "", clientPhone: "", clientEmail: "", opposingCounsel: "", caseDescription: "", priority: "", judgeName: "", courtNumber: "" },
   });
 
-  // Step 2 — Parties
-  const partiesForm = useForm<PartiesForm>({
-    resolver: zodResolver(partySchema),
-    defaultValues: { parties: [{ name: "", role: "", notes: "" }] },
+  // Step 2 — Critical Dates
+  const step2Form = useForm<Step2Form>({
+    resolver: zodResolver(step2Schema),
+    defaultValues: { incidentDate: "", firDate: "", firNumber: "", policeStation: "", arrestDate: "", inCustody: false, custodyStartDate: "", chargeSheetDate: "", nextHearing: "", hearingPurpose: "", filingDate: "", filingNumber: "" },
   });
-  const { fields, append, remove } = useFieldArray({ control: partiesForm.control, name: "parties" });
 
-  const caseValues = caseForm.watch();
-  const partiesValues = partiesForm.watch("parties");
+  // Step 3 — Procedural Checklist
+  const step3Form = useForm<Step3Form>({
+    resolver: zodResolver(step3Schema),
+    defaultValues: { checklist41aNotice: "", checklistGroundsOfArrest: "", checklistMagistrate24hrs: "", checklistRemandCaseDiary: "", checklistIndependentWitness: "" },
+  });
 
-  // Step 3 — Documents
-  const [requiredFiles, setRequiredFiles] = useState<Record<string, File | null>>({});
-  const [additionalFiles, setAdditionalFiles] = useState<File[]>([]);
-  const [dragActive, setDragActive] = useState(false);
+  // Step 4 — Parties + Sections
+  const step4Form = useForm<Step4Form>({
+    resolver: zodResolver(step4Schema),
+    defaultValues: { parties: [{ name: "", role: "", notes: "" }], applicableSections: "" },
+  });
+  const { fields, append, remove } = useFieldArray({ control: step4Form.control, name: "parties" });
 
-  // Compute required docs from case type + stage
-  const requiredDocs = useMemo(() => {
-    const caseType = caseValues.caseType;
-    const stage = caseValues.stage;
-    const byType = REQUIRED_DOCS_BY_TYPE[caseType] || [];
-    const byStage = STAGE_EXTRA_DOCS[stage] || [];
-    // Merge, avoiding duplicate categories
-    const merged = [...byType];
-    for (const doc of byStage) {
-      if (!merged.some((d) => d.category === doc.category)) {
-        merged.push(doc);
-      }
-    }
-    return merged;
-  }, [caseValues.caseType, caseValues.stage]);
+  const s1 = step1Form.watch();
+  const s2 = step2Form.watch();
+  const s3 = step3Form.watch();
+  const s4 = step4Form.watch();
 
-  const allRequiredUploaded = useMemo(() => {
-    if (requiredDocs.length === 0) return true;
-    return requiredDocs.every((doc) => requiredFiles[doc.category] != null);
-  }, [requiredDocs, requiredFiles]);
+  const isCriminal = ["Criminal", "Bail"].includes(s1.caseType);
 
-  const handleRequiredFileChange = useCallback((category: string, file: File | null) => {
-    setRequiredFiles((prev) => ({ ...prev, [category]: file }));
-  }, []);
+  // Date pills
+  const firDelay = useMemo(() => daysBetween(s2.incidentDate || "", s2.firDate || ""), [s2.incidentDate, s2.firDate]);
+  const custodyDaysCalc = useMemo(() => {
+    if (!s2.inCustody || !s2.custodyStartDate) return null;
+    const d = daysFromToday(s2.custodyStartDate);
+    return d !== null ? Math.abs(d) : null;
+  }, [s2.inCustody, s2.custodyStartDate]);
+  const daysToHearing = useMemo(() => daysFromToday(s2.nextHearing), [s2.nextHearing]);
 
-  const handleDrag = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (e.type === "dragenter" || e.type === "dragover") setDragActive(true);
-    else if (e.type === "dragleave") setDragActive(false);
-  }, []);
+  // Loophole counter
+  const loopholeCount = useMemo(() => {
+    let count = 0;
+    if (s3.checklist41aNotice === "no") count++;
+    if (s3.checklistGroundsOfArrest === "no") count++;
+    if (s3.checklistMagistrate24hrs === "no") count++;
+    if (s3.checklistRemandCaseDiary === "no") count++;
+    if (s3.checklistIndependentWitness === "no") count++;
+    return count;
+  }, [s3]);
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragActive(false);
-    const dropped = Array.from(e.dataTransfer.files);
-    setAdditionalFiles((prev) => [...prev, ...dropped]);
-  }, []);
-
-  const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const selected = Array.from(e.target.files || []);
-    setAdditionalFiles((prev) => [...prev, ...selected]);
-  }, []);
-
-  const removeAdditionalFile = (idx: number) => setAdditionalFiles((prev) => prev.filter((_, i) => i !== idx));
+  // Live section classification
+  useEffect(() => {
+    const sections = s4.applicableSections?.trim();
+    if (!sections) { setSectionClassifications([]); return; }
+    const sectionList = sections.split(",").map((s: string) => s.trim()).filter(Boolean);
+    if (sectionList.length === 0) { setSectionClassifications([]); return; }
+    const timer = setTimeout(async () => {
+      try {
+        const result = await api.caseRooms.classifySections(sectionList);
+        setSectionClassifications(result);
+      } catch { setSectionClassifications([]); }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [s4.applicableSections]);
 
   // Navigation
   const goNext = async () => {
-    if (step === 0) {
-      const valid = await caseForm.trigger();
-      if (!valid) return;
-    } else if (step === 1) {
-      const valid = await partiesForm.trigger();
-      if (!valid) return;
-    }
-    setStep((s) => Math.min(s + 1, 3));
+    if (step === 0) { if (!(await step1Form.trigger())) return; }
+    else if (step === 1) { if (!(await step2Form.trigger())) return; }
+    if (step === 1 && !isCriminal) { setStep(3); }
+    else { setStep((s) => Math.min(s + 1, 3)); }
   };
 
-  const goBack = () => setStep((s) => Math.max(s - 1, 0));
+  const goBack = () => {
+    if (step === 3 && !isCriminal) setStep(1);
+    else setStep((s) => Math.max(s - 1, 0));
+  };
 
   const handleCreate = async () => {
+    if (!(await step4Form.trigger())) return;
     setSubmitting(true);
     setError(null);
-    console.log("Token present:", !!localStorage.getItem("kanoonedge_token"));
     try {
-      const sectionsStr = caseValues.applicableSections?.trim();
+      const sectionsStr = s4.applicableSections?.trim();
       const applicableSections = sectionsStr ? sectionsStr.split(",").map((s: string) => s.trim()).filter(Boolean) : undefined;
 
       const created = await api.caseRooms.create({
-        title: caseValues.title,
-        case_number: caseValues.caseNumber,
-        court: caseValues.court,
-        case_type: caseValues.caseType,
-        stage: caseValues.stage,
-        next_hearing: caseValues.nextHearing,
-        filing_date: caseValues.filingDate || undefined,
-        filing_number: caseValues.filingNumber || undefined,
-        fir_number: caseValues.firNumber || undefined,
-        police_station: caseValues.policeStation || undefined,
-        judge_name: caseValues.judgeName || undefined,
-        court_number: caseValues.courtNumber || undefined,
+        title: s1.title,
+        case_number: s1.caseNumber || undefined,
+        court: s1.court,
+        case_type: s1.caseType,
+        stage: s1.stage,
+        court_level: s1.courtLevel || undefined,
+        lawyer_side: s1.lawyerSide || undefined,
+        client_name: s1.clientName || undefined,
+        client_phone: s1.clientPhone || undefined,
+        client_email: s1.clientEmail || undefined,
+        opposing_counsel: s1.opposingCounsel || undefined,
+        case_description: s1.caseDescription || undefined,
+        priority: s1.priority || undefined,
+        judge_name: s1.judgeName || undefined,
+        court_number: s1.courtNumber || undefined,
+        incident_date: s2.incidentDate || undefined,
+        fir_date: s2.firDate || undefined,
+        fir_number: s2.firNumber || undefined,
+        police_station: s2.policeStation || undefined,
+        arrest_date: s2.arrestDate || undefined,
+        in_custody: s2.inCustody || false,
+        custody_start_date: s2.custodyStartDate || undefined,
+        charge_sheet_date: s2.chargeSheetDate || undefined,
+        next_hearing: s2.nextHearing,
+        hearing_purpose: s2.hearingPurpose || undefined,
+        filing_date: s2.filingDate || undefined,
+        filing_number: s2.filingNumber || undefined,
+        checklist_41a_notice: (isCriminal ? s3.checklist41aNotice : undefined) || undefined,
+        checklist_grounds_of_arrest: (isCriminal ? s3.checklistGroundsOfArrest : undefined) || undefined,
+        checklist_magistrate_24hrs: (isCriminal ? s3.checklistMagistrate24hrs : undefined) || undefined,
+        checklist_remand_case_diary: (isCriminal ? s3.checklistRemandCaseDiary : undefined) || undefined,
+        checklist_independent_witness: (isCriminal ? s3.checklistIndependentWitness : undefined) || undefined,
         applicable_sections: applicableSections,
-        case_description: caseValues.caseDescription || undefined,
-        priority: caseValues.priority || undefined,
-        client_name: caseValues.clientName || undefined,
-        client_phone: caseValues.clientPhone || undefined,
-        client_email: caseValues.clientEmail || undefined,
-        opposing_counsel: caseValues.opposingCounsel || undefined,
-        parties: partiesValues
+        parties: s4.parties
           .filter((p) => p.name)
           .map((p) => ({ name: p.name, role: p.role, notes: p.notes || "" })),
       });
-
-      // Upload required documents
-      for (const [category, file] of Object.entries(requiredFiles)) {
-        if (file) {
-          await api.documents.upload(created.id, file, category, true);
-        }
-      }
-
-      // Upload additional (optional) documents
-      for (const file of additionalFiles) {
-        await api.documents.upload(created.id, file);
-      }
 
       router.push(`/dashboard/case-rooms/${created.id}`);
     } catch (err) {
@@ -342,7 +354,6 @@ export function CreateWizard({ onClose }: CreateWizardProps) {
         className="w-full max-w-2xl"
       >
         <Card className="border-border/50">
-          {/* Header */}
           <div className="flex items-center justify-between px-6 pt-6 pb-2">
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
@@ -359,595 +370,295 @@ export function CreateWizard({ onClose }: CreateWizardProps) {
           </div>
 
           <CardContent className="p-6 pt-4">
-            <StepTracker current={step} />
+            <StepTracker current={step} isCriminal={isCriminal} />
 
             <AnimatePresence mode="wait">
-              {/* ─── STEP 0: Case Info ──────────────────── */}
+              {/* ─── STEP 0: Case Identity ─────────────── */}
               {step === 0 && (
-                <motion.div
-                  key="step-0"
-                  initial={{ opacity: 0, x: 30 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -30 }}
-                  transition={{ duration: 0.2 }}
-                  className="space-y-5"
-                >
+                <motion.div key="step-0" initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -30 }} transition={{ duration: 0.2 }} className="space-y-5">
                   <div>
-                    <label className="block text-sm font-medium text-foreground mb-1.5">
-                      Case Title <span className="text-danger">*</span>
-                    </label>
-                    <Input
-                      placeholder="e.g. State vs Rahul Sharma"
-                      {...caseForm.register("title")}
-                    />
-                    {caseForm.formState.errors.title && (
-                      <p className="text-xs text-danger mt-1">{caseForm.formState.errors.title.message}</p>
-                    )}
+                    <label className="block text-sm font-medium text-foreground mb-1.5">Case Title <span className="text-danger">*</span></label>
+                    <Input placeholder="e.g. State vs Rahul Sharma" {...step1Form.register("title")} />
+                    {step1Form.formState.errors.title && <p className="text-xs text-danger mt-1">{step1Form.formState.errors.title.message}</p>}
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-foreground mb-1.5">
-                        Case Number <span className="text-danger">*</span>
-                      </label>
-                      <Input
-                        placeholder="e.g. Sessions Case 234/2024"
-                        {...caseForm.register("caseNumber")}
-                      />
-                      {caseForm.formState.errors.caseNumber && (
-                        <p className="text-xs text-danger mt-1">{caseForm.formState.errors.caseNumber.message}</p>
-                      )}
+                      <label className="block text-sm font-medium text-foreground mb-1.5">Case Number</label>
+                      <Input placeholder="e.g. Sessions 234/2024" {...step1Form.register("caseNumber")} />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-foreground mb-1.5">
-                        Court Name <span className="text-danger">*</span>
-                      </label>
-                      <Input
-                        placeholder="e.g. Sessions Court Saket"
-                        {...caseForm.register("court")}
-                      />
-                      {caseForm.formState.errors.court && (
-                        <p className="text-xs text-danger mt-1">{caseForm.formState.errors.court.message}</p>
-                      )}
+                      <label className="block text-sm font-medium text-foreground mb-1.5">Court Name <span className="text-danger">*</span></label>
+                      <Input placeholder="e.g. Sessions Court Saket" {...step1Form.register("court")} />
+                      {step1Form.formState.errors.court && <p className="text-xs text-danger mt-1">{step1Form.formState.errors.court.message}</p>}
                     </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-foreground mb-1.5">
-                        Case Type <span className="text-danger">*</span>
-                      </label>
-                      <select
-                        {...caseForm.register("caseType")}
-                        className="w-full h-10 rounded-md border border-input bg-secondary px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                      >
+                      <label className="block text-sm font-medium text-foreground mb-1.5">Case Type <span className="text-danger">*</span></label>
+                      <select {...step1Form.register("caseType")} className="w-full h-10 rounded-md border border-input bg-secondary px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring">
                         <option value="">Select type</option>
-                        {CASE_TYPES.map((t) => (
-                          <option key={t} value={t}>{t}</option>
-                        ))}
+                        {CASE_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
                       </select>
-                      {caseForm.formState.errors.caseType && (
-                        <p className="text-xs text-danger mt-1">{caseForm.formState.errors.caseType.message}</p>
-                      )}
+                      {step1Form.formState.errors.caseType && <p className="text-xs text-danger mt-1">{step1Form.formState.errors.caseType.message}</p>}
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-foreground mb-1.5">
-                        Case Stage <span className="text-danger">*</span>
-                      </label>
-                      <select
-                        {...caseForm.register("stage")}
-                        className="w-full h-10 rounded-md border border-input bg-secondary px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                      >
+                      <label className="block text-sm font-medium text-foreground mb-1.5">Case Stage <span className="text-danger">*</span></label>
+                      <select {...step1Form.register("stage")} className="w-full h-10 rounded-md border border-input bg-secondary px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring">
                         <option value="">Select stage</option>
-                        {CASE_STAGES.map((s) => (
-                          <option key={s} value={s}>{s}</option>
-                        ))}
+                        {CASE_STAGES.map((s) => <option key={s} value={s}>{s}</option>)}
                       </select>
-                      {caseForm.formState.errors.stage && (
-                        <p className="text-xs text-danger mt-1">{caseForm.formState.errors.stage.message}</p>
-                      )}
+                      {step1Form.formState.errors.stage && <p className="text-xs text-danger mt-1">{step1Form.formState.errors.stage.message}</p>}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-foreground mb-1.5">Court Level</label>
+                      <select {...step1Form.register("courtLevel")} className="w-full h-10 rounded-md border border-input bg-secondary px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring">
+                        <option value="">Select level</option>
+                        {COURT_LEVELS.map((l) => <option key={l} value={l}>{l}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-foreground mb-1.5">You represent</label>
+                      <select {...step1Form.register("lawyerSide")} className="w-full h-10 rounded-md border border-input bg-secondary px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring">
+                        <option value="">Select side</option>
+                        {LAWYER_SIDES.map((s) => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs text-muted-foreground mb-1">Client Name</label>
+                      <Input placeholder="e.g. Rahul Sharma" {...step1Form.register("clientName")} />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-muted-foreground mb-1">Client Phone</label>
+                      <Input placeholder="+91 98765 43210" {...step1Form.register("clientPhone")} />
                     </div>
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-foreground mb-1.5">
-                      Next Hearing Date <span className="text-danger">*</span>
-                    </label>
-                    <Input
-                      type="date"
-                      {...caseForm.register("nextHearing")}
-                    />
-                    {caseForm.formState.errors.nextHearing && (
-                      <p className="text-xs text-danger mt-1">{caseForm.formState.errors.nextHearing.message}</p>
-                    )}
+                    <label className="block text-xs text-muted-foreground mb-1">Case Description</label>
+                    <textarea {...step1Form.register("caseDescription")} placeholder="Brief description..." className="w-full min-h-[60px] rounded-md border border-input bg-secondary px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring resize-none" />
                   </div>
-
-                  {/* Advanced Fields Toggle */}
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setShowAdvanced(!showAdvanced)}
-                    className="w-full text-muted-foreground"
-                  >
-                    {showAdvanced ? "Hide" : "Show"} Advanced Details (Client, Filing, Sections)
-                  </Button>
-
-                  {showAdvanced && (
-                    <div className="space-y-4 pt-2 border-t border-border">
-                      {/* Client Info */}
-                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Client Information</p>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-xs text-muted-foreground mb-1">Client Name</label>
-                          <Input placeholder="e.g. Rahul Sharma" {...caseForm.register("clientName")} />
-                        </div>
-                        <div>
-                          <label className="block text-xs text-muted-foreground mb-1">Client Phone</label>
-                          <Input placeholder="+91 98765 43210" {...caseForm.register("clientPhone")} />
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-xs text-muted-foreground mb-1">Client Email</label>
-                          <Input type="email" placeholder="client@email.com" {...caseForm.register("clientEmail")} />
-                        </div>
-                        <div>
-                          <label className="block text-xs text-muted-foreground mb-1">Opposing Counsel</label>
-                          <Input placeholder="Name of opposing counsel" {...caseForm.register("opposingCounsel")} />
-                        </div>
-                      </div>
-
-                      {/* Filing Info */}
-                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider pt-2">Filing & Court Details</p>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-xs text-muted-foreground mb-1">Filing Date</label>
-                          <Input type="date" {...caseForm.register("filingDate")} />
-                        </div>
-                        <div>
-                          <label className="block text-xs text-muted-foreground mb-1">Filing Number</label>
-                          <Input placeholder="e.g. SC/123/2024" {...caseForm.register("filingNumber")} />
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-xs text-muted-foreground mb-1">Judge Name</label>
-                          <Input placeholder="Hon'ble Justice..." {...caseForm.register("judgeName")} />
-                        </div>
-                        <div>
-                          <label className="block text-xs text-muted-foreground mb-1">Court Number</label>
-                          <Input placeholder="e.g. Court 5" {...caseForm.register("courtNumber")} />
-                        </div>
-                      </div>
-
-                      {/* Criminal-specific fields */}
-                      {caseValues.caseType === "Criminal" && (
-                        <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <label className="block text-xs text-muted-foreground mb-1">FIR Number</label>
-                            <Input placeholder="e.g. FIR/123/2024" {...caseForm.register("firNumber")} />
-                          </div>
-                          <div>
-                            <label className="block text-xs text-muted-foreground mb-1">Police Station</label>
-                            <Input placeholder="e.g. Saket PS" {...caseForm.register("policeStation")} />
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Applicable Sections */}
-                      <div>
-                        <label className="block text-xs text-muted-foreground mb-1">
-                          Applicable Sections (comma-separated)
-                        </label>
-                        <Input
-                          placeholder="e.g. IPC 302, IPC 120B, CrPC 167(2)"
-                          {...caseForm.register("applicableSections")}
-                        />
-                      </div>
-
-                      {/* Priority & Description */}
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-xs text-muted-foreground mb-1">Priority</label>
-                          <select
-                            {...caseForm.register("priority")}
-                            className="w-full h-10 rounded-md border border-input bg-secondary px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                          >
-                            <option value="">Select priority</option>
-                            <option value="low">Low</option>
-                            <option value="medium">Medium</option>
-                            <option value="high">High</option>
-                            <option value="urgent">Urgent</option>
-                          </select>
-                        </div>
-                      </div>
-                      <div>
-                        <label className="block text-xs text-muted-foreground mb-1">Case Description</label>
-                        <textarea
-                          {...caseForm.register("caseDescription")}
-                          placeholder="Brief description of the case..."
-                          className="w-full min-h-[80px] rounded-md border border-input bg-secondary px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring resize-none"
-                        />
-                      </div>
-                    </div>
-                  )}
                 </motion.div>
               )}
 
-              {/* ─── STEP 1: Parties ────────────────────── */}
+              {/* ─── STEP 1: Critical Dates ────────────── */}
               {step === 1 && (
-                <motion.div
-                  key="step-1"
-                  initial={{ opacity: 0, x: 30 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -30 }}
-                  transition={{ duration: 0.2 }}
-                  className="space-y-4"
-                >
-                  <p className="text-sm text-muted-foreground">
-                    Add the parties involved in this case. You can add more later.
-                  </p>
+                <motion.div key="step-1" initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -30 }} transition={{ duration: 0.2 }} className="space-y-5">
+                  <p className="text-sm text-muted-foreground">Enter key dates. We&apos;ll auto-build your timeline and calculate deadlines.</p>
 
-                  <div className="space-y-3 max-h-[360px] overflow-y-auto pr-1">
-                    {fields.map((field, idx) => (
-                      <div key={field.id} className="rounded-lg border border-border p-4 space-y-3 bg-card/50">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                            Party {idx + 1}
-                          </span>
-                          {fields.length > 1 && (
-                            <Button variant="ghost" size="icon" className="w-7 h-7" onClick={() => remove(idx)}>
-                              <Trash2 className="w-3.5 h-3.5 text-danger" />
-                            </Button>
-                          )}
-                        </div>
-                        <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <Input
-                              placeholder="Full name"
-                              {...partiesForm.register(`parties.${idx}.name`)}
-                            />
-                            {partiesForm.formState.errors.parties?.[idx]?.name && (
-                              <p className="text-xs text-danger mt-1">
-                                {partiesForm.formState.errors.parties[idx]?.name?.message}
-                              </p>
-                            )}
-                          </div>
-                          <select
-                            {...partiesForm.register(`parties.${idx}.role`)}
-                            className="h-10 rounded-md border border-input bg-secondary px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                          >
-                            <option value="">Select role</option>
-                            {PARTY_ROLES.map((r) => (
-                              <option key={r} value={r}>{r}</option>
-                            ))}
-                          </select>
-                        </div>
-                        <Input
-                          placeholder="Additional notes (optional)"
-                          {...partiesForm.register(`parties.${idx}.notes`)}
-                        />
-                      </div>
-                    ))}
-                  </div>
-
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => append({ name: "", role: "", notes: "" })}
-                    className="w-full"
-                  >
-                    <Plus className="w-4 h-4 mr-2" />
-                    Add Another Party
-                  </Button>
-                </motion.div>
-              )}
-
-              {/* ─── STEP 2: Documents ──────────────────── */}
-              {step === 2 && (
-                <motion.div
-                  key="step-2"
-                  initial={{ opacity: 0, x: 30 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -30 }}
-                  transition={{ duration: 0.2 }}
-                  className="space-y-5"
-                >
-                  {/* Required Documents Section */}
-                  {requiredDocs.length > 0 && (
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
+                  {isCriminal && (
+                    <>
+                      <div className="grid grid-cols-2 gap-4">
                         <div>
-                          <h3 className="text-sm font-semibold text-foreground">Required Documents</h3>
-                          <p className="text-xs text-muted-foreground">
-                            Upload all required documents before creating the case room.
-                          </p>
+                          <label className="block text-sm font-medium text-foreground mb-1.5">Incident/Offence Date</label>
+                          <Input type="date" {...step2Form.register("incidentDate")} />
                         </div>
-                        <Badge variant={allRequiredUploaded ? "default" : "destructive"} className="text-[10px]">
-                          {Object.values(requiredFiles).filter(Boolean).length}/{requiredDocs.length} uploaded
-                        </Badge>
+                        <div>
+                          <label className="block text-sm font-medium text-foreground mb-1.5">FIR Date</label>
+                          <Input type="date" {...step2Form.register("firDate")} />
+                        </div>
                       </div>
 
-                      {!allRequiredUploaded && (
-                        <div className="flex items-start gap-2 p-3 rounded-lg bg-destructive/10 border border-destructive/20">
-                          <AlertCircle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
-                          <p className="text-xs text-destructive">
-                            All required documents must be uploaded to create the case room.
-                          </p>
+                      {firDelay !== null && firDelay > 0 && (
+                        <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm ${firDelay > 2 ? "bg-red-500/10 text-red-400" : "bg-yellow-500/10 text-yellow-400"}`}>
+                          <Clock className="w-4 h-4" />
+                          FIR filed {firDelay} day{firDelay !== 1 ? "s" : ""} after incident{firDelay > 2 && " — potential defence argument"}
                         </div>
                       )}
 
-                      <div className="space-y-2 max-h-[280px] overflow-y-auto pr-1">
-                        {requiredDocs.map((doc) => {
-                          const file = requiredFiles[doc.category];
-                          const hasFile = file != null;
-                          return (
-                            <div
-                              key={doc.category}
-                              className={`rounded-lg border p-3 transition-colors ${
-                                hasFile
-                                  ? "border-green-500/50 bg-green-500/5"
-                                  : "border-destructive/30 bg-destructive/5"
-                              }`}
-                            >
-                              <div className="flex items-center gap-3">
-                                {/* Status indicator */}
-                                <div className="shrink-0">
-                                  {hasFile ? (
-                                    <CheckCircle2 className="w-5 h-5 text-green-500" />
-                                  ) : (
-                                    <Circle className="w-5 h-5 text-destructive" />
-                                  )}
-                                </div>
-
-                                {/* Doc info */}
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-sm font-medium text-foreground">{doc.label}</p>
-                                  {hasFile ? (
-                                    <p className="text-xs text-muted-foreground truncate">
-                                      {file.name} — {(file.size / (1024 * 1024)).toFixed(2)} MB
-                                    </p>
-                                  ) : (
-                                    <p className="text-xs text-muted-foreground">{doc.description}</p>
-                                  )}
-                                </div>
-
-                                {/* Action */}
-                                <div className="shrink-0">
-                                  {hasFile ? (
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      className="w-7 h-7"
-                                      onClick={() => handleRequiredFileChange(doc.category, null)}
-                                    >
-                                      <X className="w-3.5 h-3.5 text-muted-foreground" />
-                                    </Button>
-                                  ) : (
-                                    <label>
-                                      <input
-                                        type="file"
-                                        className="hidden"
-                                        accept=".pdf,.docx,.jpg,.jpeg,.png"
-                                        onChange={(e) => {
-                                          const f = e.target.files?.[0];
-                                          if (f) handleRequiredFileChange(doc.category, f);
-                                          e.target.value = "";
-                                        }}
-                                      />
-                                      <Button variant="outline" size="sm" asChild>
-                                        <span>
-                                          <Upload className="w-3 h-3 mr-1" />
-                                          Upload
-                                        </span>
-                                      </Button>
-                                    </label>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-xs text-muted-foreground mb-1">FIR Number</label>
+                          <Input placeholder="e.g. FIR/123/2024" {...step2Form.register("firNumber")} />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-muted-foreground mb-1">Police Station</label>
+                          <Input placeholder="e.g. Saket PS" {...step2Form.register("policeStation")} />
+                        </div>
                       </div>
-                    </div>
-                  )}
 
-                  {requiredDocs.length === 0 && (
-                    <div className="text-center py-4">
-                      <p className="text-sm text-muted-foreground">
-                        Select a case type in Step 1 to see required documents.
-                      </p>
-                    </div>
-                  )}
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-foreground mb-1.5">Arrest Date</label>
+                          <Input type="date" {...step2Form.register("arrestDate")} />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-foreground mb-1.5">Charge Sheet Date</label>
+                          <Input type="date" {...step2Form.register("chargeSheetDate")} />
+                        </div>
+                      </div>
 
-                  {/* Additional Documents Section */}
-                  <div className="space-y-3 pt-2 border-t border-border">
-                    <div>
-                      <h3 className="text-sm font-semibold text-foreground">Additional Documents</h3>
-                      <p className="text-xs text-muted-foreground">
-                        Upload any supporting evidence or additional files (optional).
-                      </p>
-                    </div>
-
-                    <div
-                      onDragEnter={handleDrag}
-                      onDragLeave={handleDrag}
-                      onDragOver={handleDrag}
-                      onDrop={handleDrop}
-                      className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
-                        dragActive ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"
-                      }`}
-                    >
-                      <Upload className="w-6 h-6 text-muted-foreground mx-auto mb-2" />
-                      <p className="text-sm text-foreground font-medium mb-1">Drag and drop files here</p>
-                      <p className="text-xs text-muted-foreground mb-3">PDF, DOCX, JPG, PNG — up to 50 MB</p>
-                      <label>
-                        <input
-                          type="file"
-                          className="hidden"
-                          multiple
-                          accept=".pdf,.docx,.jpg,.jpeg,.png"
-                          onChange={handleFileChange}
-                        />
-                        <Button variant="outline" size="sm" asChild>
-                          <span>Browse Files</span>
-                        </Button>
-                      </label>
-                    </div>
-
-                    {additionalFiles.length > 0 && (
-                      <div className="space-y-2">
-                        {additionalFiles.map((file, idx) => (
-                          <div
-                            key={`${file.name}-${idx}`}
-                            className="flex items-center gap-3 p-3 rounded-lg border border-border bg-card/50"
-                          >
-                            <div className="w-8 h-8 rounded bg-primary/10 flex items-center justify-center shrink-0">
-                              <FileText className="w-4 h-4 text-primary" />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium text-foreground truncate">{file.name}</p>
-                              <p className="text-xs text-muted-foreground">
-                                {(file.size / (1024 * 1024)).toFixed(2)} MB
-                              </p>
-                            </div>
-                            <Button variant="ghost" size="icon" className="w-7 h-7 shrink-0" onClick={() => removeAdditionalFile(idx)}>
-                              <X className="w-3.5 h-3.5 text-muted-foreground" />
-                            </Button>
+                      <div className="flex items-center gap-4">
+                        <label className="flex items-center gap-2 text-sm text-foreground cursor-pointer">
+                          <input type="checkbox" {...step2Form.register("inCustody")} className="rounded border-border" />
+                          Currently in custody
+                        </label>
+                        {s2.inCustody && (
+                          <div className="flex-1">
+                            <Input type="date" {...step2Form.register("custodyStartDate")} />
                           </div>
-                        ))}
+                        )}
                       </div>
+
+                      {custodyDaysCalc !== null && custodyDaysCalc > 0 && (
+                        <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm ${custodyDaysCalc > 60 ? "bg-red-500/10 text-red-400" : "bg-yellow-500/10 text-yellow-400"}`}>
+                          <Shield className="w-4 h-4" />
+                          In custody for {custodyDaysCalc} day{custodyDaysCalc !== 1 ? "s" : ""}{custodyDaysCalc > 60 && " — check default bail eligibility"}
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-foreground mb-1.5">Next Hearing Date <span className="text-danger">*</span></label>
+                      <Input type="date" {...step2Form.register("nextHearing")} />
+                      {step2Form.formState.errors.nextHearing && <p className="text-xs text-danger mt-1">{step2Form.formState.errors.nextHearing.message}</p>}
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-foreground mb-1.5">Hearing Purpose</label>
+                      <Input placeholder="e.g. Bail arguments" {...step2Form.register("hearingPurpose")} />
+                    </div>
+                  </div>
+
+                  {daysToHearing !== null && (
+                    <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm ${daysToHearing <= 1 ? "bg-red-500/10 text-red-400" : daysToHearing <= 3 ? "bg-orange-500/10 text-orange-400" : "bg-muted text-muted-foreground"}`}>
+                      <Calendar className="w-4 h-4" />
+                      {daysToHearing <= 0 ? "Hearing is today or overdue!" : `${daysToHearing} day${daysToHearing !== 1 ? "s" : ""} to hearing`}
+                    </div>
+                  )}
+
+                  {!isCriminal && (
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs text-muted-foreground mb-1">Filing Date</label>
+                        <Input type="date" {...step2Form.register("filingDate")} />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-muted-foreground mb-1">Filing Number</label>
+                        <Input placeholder="e.g. SC/123/2024" {...step2Form.register("filingNumber")} />
+                      </div>
+                    </div>
+                  )}
+                </motion.div>
+              )}
+
+              {/* ─── STEP 2: Procedural Checklist ──────── */}
+              {step === 2 && isCriminal && (
+                <motion.div key="step-2" initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -30 }} transition={{ duration: 0.2 }} className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm text-muted-foreground">Answer these procedural questions. Each &ldquo;No&rdquo; is a potential loophole.</p>
+                    {loopholeCount > 0 && (
+                      <Badge variant="destructive" className="text-xs">
+                        <AlertTriangle className="w-3 h-3 mr-1" />
+                        {loopholeCount} loophole{loopholeCount !== 1 ? "s" : ""}
+                      </Badge>
                     )}
+                  </div>
+
+                  <div className="space-y-3 max-h-[400px] overflow-y-auto pr-1">
+                    <ChecklistItem
+                      label="Was Section 41A CrPC notice served before arrest?"
+                      description="Mandatory for offences with max punishment < 7 years (Arnesh Kumar vs State of Bihar)"
+                      value={s3.checklist41aNotice as ChecklistValue}
+                      onChange={(v) => step3Form.setValue("checklist41aNotice", v)}
+                    />
+                    <ChecklistItem
+                      label="Were the grounds of arrest communicated?"
+                      description="Article 22(1) of Constitution — must inform reason for arrest"
+                      value={s3.checklistGroundsOfArrest as ChecklistValue}
+                      onChange={(v) => step3Form.setValue("checklistGroundsOfArrest", v)}
+                    />
+                    <ChecklistItem
+                      label="Produced before Magistrate within 24 hours?"
+                      description="Article 22(2) — mandatory production within 24 hours"
+                      value={s3.checklistMagistrate24hrs as ChecklistValue}
+                      onChange={(v) => step3Form.setValue("checklistMagistrate24hrs", v)}
+                    />
+                    <ChecklistItem
+                      label="Case diary shown during remand hearing?"
+                      description="Required under Section 167 CrPC for judicial remand"
+                      value={s3.checklistRemandCaseDiary as ChecklistValue}
+                      onChange={(v) => step3Form.setValue("checklistRemandCaseDiary", v)}
+                    />
+                    <ChecklistItem
+                      label="Independent witness during panchnama?"
+                      description="Required for search and seizure under CrPC"
+                      value={s3.checklistIndependentWitness as ChecklistValue}
+                      onChange={(v) => step3Form.setValue("checklistIndependentWitness", v)}
+                    />
                   </div>
                 </motion.div>
               )}
 
-              {/* ─── STEP 3: Review ─────────────────────── */}
+              {/* ─── STEP 3: Parties & Sections ────────── */}
               {step === 3 && (
-                <motion.div
-                  key="step-3"
-                  initial={{ opacity: 0, x: 30 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -30 }}
-                  transition={{ duration: 0.2 }}
-                  className="space-y-5"
-                >
-                  {/* Case Info Summary */}
-                  <div className="rounded-lg border border-border p-4 space-y-3">
-                    <div className="flex items-center gap-2 mb-1">
-                      <Scale className="w-4 h-4 text-primary" />
-                      <h3 className="text-sm font-semibold text-foreground">Case Information</h3>
-                    </div>
-                    <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
-                      <div>
-                        <span className="text-muted-foreground">Title:</span>{" "}
-                        <span className="text-foreground">{caseValues.title || "—"}</span>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground">Number:</span>{" "}
-                        <span className="text-foreground">{caseValues.caseNumber || "—"}</span>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground">Court:</span>{" "}
-                        <span className="text-foreground">{caseValues.court || "—"}</span>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground">Hearing:</span>{" "}
-                        <span className="text-foreground">{caseValues.nextHearing || "—"}</span>
-                      </div>
-                    </div>
-                    <div className="flex gap-2 pt-1">
-                      {caseValues.caseType && <Badge variant="secondary">{caseValues.caseType}</Badge>}
-                      {caseValues.stage && <Badge variant="secondary">{caseValues.stage}</Badge>}
-                    </div>
-                  </div>
-
-                  {/* Parties Summary */}
-                  <div className="rounded-lg border border-border p-4 space-y-3">
-                    <div className="flex items-center gap-2 mb-1">
-                      <Users className="w-4 h-4 text-primary" />
-                      <h3 className="text-sm font-semibold text-foreground">
-                        Parties ({partiesValues.filter((p) => p.name).length})
-                      </h3>
-                    </div>
-                    <div className="space-y-2">
-                      {partiesValues
-                        .filter((p) => p.name)
-                        .map((party, i) => (
-                          <div key={i} className="flex items-center gap-2 text-sm">
-                            <Badge variant="outline" className="text-[10px] shrink-0">
-                              {party.role || "—"}
-                            </Badge>
-                            <span className="text-foreground">{party.name}</span>
-                            {party.notes && (
-                              <span className="text-muted-foreground text-xs">— {party.notes}</span>
+                <motion.div key="step-3" initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -30 }} transition={{ duration: 0.2 }} className="space-y-5">
+                  <div className="space-y-3">
+                    <p className="text-sm font-medium text-foreground">Parties Involved</p>
+                    <div className="space-y-3 max-h-[200px] overflow-y-auto pr-1">
+                      {fields.map((field, idx) => (
+                        <div key={field.id} className="rounded-lg border border-border p-3 space-y-2 bg-card/50">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Party {idx + 1}</span>
+                            {fields.length > 1 && (
+                              <Button variant="ghost" size="icon" className="w-7 h-7" onClick={() => remove(idx)}>
+                                <Trash2 className="w-3.5 h-3.5 text-danger" />
+                              </Button>
                             )}
                           </div>
-                        ))}
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <Input placeholder="Full name" {...step4Form.register(`parties.${idx}.name`)} />
+                              {step4Form.formState.errors.parties?.[idx]?.name && <p className="text-xs text-danger mt-1">{step4Form.formState.errors.parties[idx]?.name?.message}</p>}
+                            </div>
+                            <select {...step4Form.register(`parties.${idx}.role`)} className="h-10 rounded-md border border-input bg-secondary px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring">
+                              <option value="">Select role</option>
+                              {PARTY_ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
+                            </select>
+                          </div>
+                        </div>
+                      ))}
                     </div>
+                    <Button variant="outline" size="sm" onClick={() => append({ name: "", role: "", notes: "" })} className="w-full">
+                      <Plus className="w-4 h-4 mr-2" /> Add Party
+                    </Button>
                   </div>
 
-                  {/* Documents Summary */}
-                  <div className="rounded-lg border border-border p-4 space-y-3">
-                    <div className="flex items-center gap-2 mb-1">
-                      <Upload className="w-4 h-4 text-primary" />
-                      <h3 className="text-sm font-semibold text-foreground">Documents</h3>
+                  <div className="space-y-3 pt-3 border-t border-border">
+                    <div>
+                      <label className="block text-sm font-medium text-foreground mb-1.5">Applicable Sections (comma-separated)</label>
+                      <Input placeholder="e.g. 302, 498A, IPC 120B, NDPS 21" {...step4Form.register("applicableSections")} />
+                      <p className="text-xs text-muted-foreground mt-1">Type sections — we&apos;ll classify them instantly</p>
                     </div>
 
-                    {/* Required docs */}
-                    {requiredDocs.length > 0 && (
-                      <div className="space-y-1.5">
-                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                          Required ({Object.values(requiredFiles).filter(Boolean).length}/{requiredDocs.length})
-                        </p>
-                        {requiredDocs.map((doc) => {
-                          const file = requiredFiles[doc.category];
-                          return (
-                            <div key={doc.category} className="flex items-center gap-2 text-sm">
-                              {file ? (
-                                <CheckCircle2 className="w-3.5 h-3.5 text-green-500 shrink-0" />
+                    {sectionClassifications.length > 0 && (
+                      <div className="space-y-2">
+                        {sectionClassifications.map((sec, i) => (
+                          <div key={i} className={`flex items-center justify-between px-3 py-2 rounded-lg text-sm border ${sec.found ? (sec.over_7_years ? "border-red-500/30 bg-red-500/5" : "border-green-500/30 bg-green-500/5") : "border-border bg-muted/50"}`}>
+                            <div className="flex-1 min-w-0">
+                              <span className="font-medium text-foreground">{sec.raw}</span>
+                              {sec.found && <span className="text-muted-foreground ml-2">— {sec.title}</span>}
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0 ml-2">
+                              {sec.found ? (
+                                <>
+                                  <Badge variant={sec.bailable === "Yes" ? "secondary" : "destructive"} className="text-[10px]">{sec.bailable === "Yes" ? "Bailable" : "Non-Bail"}</Badge>
+                                  <Badge variant={sec.over_7_years ? "destructive" : "secondary"} className="text-[10px]">{sec.max_punishment}</Badge>
+                                </>
                               ) : (
-                                <Circle className="w-3.5 h-3.5 text-destructive shrink-0" />
-                              )}
-                              <span className="text-foreground">{doc.label}</span>
-                              {file && (
-                                <span className="text-muted-foreground text-xs truncate">— {file.name}</span>
+                                <Badge variant="outline" className="text-[10px]">Not found</Badge>
                               )}
                             </div>
-                          );
-                        })}
-                      </div>
-                    )}
-
-                    {/* Additional docs */}
-                    {additionalFiles.length > 0 && (
-                      <div className="space-y-1.5">
-                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                          Additional ({additionalFiles.length})
-                        </p>
-                        {additionalFiles.map((f, i) => (
-                          <div key={i} className="flex items-center gap-2 text-sm">
-                            <FileText className="w-3.5 h-3.5 text-primary shrink-0" />
-                            <span className="text-foreground truncate">{f.name}</span>
-                            <span className="text-muted-foreground text-xs shrink-0">
-                              {(f.size / (1024 * 1024)).toFixed(1)} MB
-                            </span>
                           </div>
                         ))}
-                      </div>
-                    )}
-
-                    {requiredDocs.length === 0 && additionalFiles.length === 0 && (
-                      <p className="text-sm text-muted-foreground">No documents uploaded.</p>
-                    )}
-
-                    {!allRequiredUploaded && requiredDocs.length > 0 && (
-                      <div className="flex items-start gap-2 p-2 rounded bg-destructive/10 border border-destructive/20">
-                        <AlertCircle className="w-3.5 h-3.5 text-destructive shrink-0 mt-0.5" />
-                        <p className="text-xs text-destructive">
-                          Missing required documents — go back to Step 3 to upload.
-                        </p>
                       </div>
                     )}
                   </div>
@@ -955,47 +666,26 @@ export function CreateWizard({ onClose }: CreateWizardProps) {
               )}
             </AnimatePresence>
 
-            {/* Error display */}
             {error && (
-              <div className="flex items-start gap-2 mt-4 p-3 rounded-lg bg-destructive/10 border border-destructive/20">
-                <AlertCircle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
-                <p className="text-sm text-destructive">{error}</p>
-              </div>
+              <div className="mt-4 p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-sm text-destructive">{error}</div>
             )}
 
-            {/* Footer buttons */}
-            <div className="flex items-center justify-between mt-8 pt-4 border-t border-border">
-              <div>
-                {step > 0 && (
-                  <Button variant="outline" onClick={goBack}>
-                    <ChevronLeft className="w-4 h-4 mr-1" />
-                    Back
-                  </Button>
-                )}
-              </div>
-              <div className="flex items-center gap-2">
-                <Button variant="ghost" onClick={onClose}>Cancel</Button>
-                {step < 3 ? (
-                  <Button onClick={goNext}>
-                    Next
-                    <ChevronRight className="w-4 h-4 ml-1" />
-                  </Button>
-                ) : (
-                  <Button onClick={handleCreate} disabled={submitting || !allRequiredUploaded}>
-                    {submitting ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Creating...
-                      </>
-                    ) : (
-                      <>
-                        <CheckCircle2 className="w-4 h-4 mr-2" />
-                        Create Case Room
-                      </>
-                    )}
-                  </Button>
-                )}
-              </div>
+            <div className="flex items-center justify-between mt-6 pt-4 border-t border-border">
+              {step > 0 ? (
+                <Button variant="ghost" onClick={goBack} disabled={submitting}>
+                  <ChevronLeft className="w-4 h-4 mr-1" /> Back
+                </Button>
+              ) : <div />}
+
+              {step < 3 ? (
+                <Button onClick={goNext} className="bg-primary text-primary-foreground hover:bg-primary/90">
+                  Next <ChevronRight className="w-4 h-4 ml-1" />
+                </Button>
+              ) : (
+                <Button onClick={handleCreate} disabled={submitting} className="bg-primary text-primary-foreground hover:bg-primary/90">
+                  {submitting ? (<><Loader2 className="w-4 h-4 mr-2 animate-spin" />Creating...</>) : (<><CheckCircle2 className="w-4 h-4 mr-2" />Create Case Room</>)}
+                </Button>
+              )}
             </div>
           </CardContent>
         </Card>

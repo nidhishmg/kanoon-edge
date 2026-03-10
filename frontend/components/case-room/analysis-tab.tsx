@@ -17,6 +17,10 @@ import {
   BookOpen,
   Scale,
   Clock,
+  PenTool,
+  MessageSquare,
+  ShieldCheck,
+  ShieldAlert,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -91,6 +95,7 @@ export function AnalysisTab({ caseId }: AnalysisTabProps) {
   const [stages, setStages] = useState(analysisStages.map((s) => ({ ...s })));
   const [progress, setProgress] = useState(0);
   const { analysisResults, setAnalysisResults } = useCaseRoomStore();
+  const setActiveTab = useCaseRoomStore((s) => s.setActiveTab);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
   useQuery({
@@ -259,88 +264,149 @@ export function AnalysisTab({ caseId }: AnalysisTabProps) {
           </CardContent>
         </Card>
       ) : (
-        <div className="space-y-3">
-          {analysisResults.map((result, i) => {
-            const config = typeConfig[result.type];
-            const severity = severityConfig[result.severity];
-            const Icon = config.icon;
-            const isExpanded = expandedIds.has(result.id);
+        <>
+          {/* Intake findings (from wizard checklist) */}
+          {analysisResults.filter((r) => r.source === "intake").length > 0 && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 text-sm">
+                <ShieldAlert className="w-4 h-4 text-warning" />
+                <span className="font-medium text-foreground">Intake Findings</span>
+                <Badge variant="warning" className="text-[10px]">
+                  {analysisResults.filter((r) => r.source === "intake").length}
+                </Badge>
+                <span className="text-xs text-muted-foreground ml-1">From case intake checklist</span>
+              </div>
+              {renderResults(analysisResults.filter((r) => r.source === "intake"))}
+            </div>
+          )}
 
-            return (
-              <motion.div
-                key={result.id}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.05 }}
-              >
-                <Card className={`border transition-colors ${isExpanded ? config.border : "border-border"}`}>
-                  <CardContent className="p-0">
-                    <button
-                      className="w-full px-5 py-4 flex items-center gap-4 text-left"
-                      onClick={() => toggleExpanded(result.id)}
-                    >
-                      <div className={`w-10 h-10 rounded-lg ${config.bg} flex items-center justify-center shrink-0`}>
-                        <Icon className={`w-5 h-5 ${config.color}`} />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <Badge variant={severity.color} className="text-[10px]">{severity.label}</Badge>
-                          <Badge variant="secondary" className="text-[10px]">{config.label}</Badge>
-                        </div>
-                        <h4 className="font-medium text-sm text-foreground truncate">{result.title}</h4>
-                      </div>
-                      {isExpanded ? (
-                        <ChevronUp className="w-5 h-5 text-muted-foreground shrink-0" />
-                      ) : (
-                        <ChevronDown className="w-5 h-5 text-muted-foreground shrink-0" />
-                      )}
-                    </button>
+          {/* Document findings (from AI analysis) */}
+          {analysisResults.filter((r) => r.source !== "intake").length > 0 && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 text-sm">
+                <ShieldCheck className="w-4 h-4 text-info" />
+                <span className="font-medium text-foreground">Document Analysis</span>
+                <Badge variant="secondary" className="text-[10px]">
+                  {analysisResults.filter((r) => r.source !== "intake").length}
+                </Badge>
+                <span className="text-xs text-muted-foreground ml-1">From AI document scan</span>
+              </div>
+              {renderResults(analysisResults.filter((r) => r.source !== "intake"))}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
 
-                    <AnimatePresence>
-                      {isExpanded && (
-                        <motion.div
-                          initial={{ height: 0, opacity: 0 }}
-                          animate={{ height: "auto", opacity: 1 }}
-                          exit={{ height: 0, opacity: 0 }}
-                          transition={{ duration: 0.2 }}
-                          className="overflow-hidden"
-                        >
-                          <div className="px-5 pb-5 space-y-4 border-t border-border pt-4">
-                            <div>
-                              <h5 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
-                                Description
-                              </h5>
-                              <p className="text-sm text-foreground leading-relaxed">{result.description}</p>
-                            </div>
-                            <div>
-                              <h5 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
-                                Legal Basis
-                              </h5>
-                              <p className="text-sm text-foreground font-mono bg-secondary/50 p-3 rounded-md border border-border">
-                                {result.legalBasis}
-                              </p>
-                            </div>
-                            <div>
-                              <h5 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
-                                Suggested Strategy
-                              </h5>
-                              <p className="text-sm text-foreground leading-relaxed">{result.guidance}</p>
-                            </div>
+  function renderResults(results: typeof analysisResults) {
+    return (
+      <div className="space-y-3">
+        {results.map((result, i) => {
+          const config = typeConfig[result.type];
+          const severity = severityConfig[result.severity];
+          const Icon = config.icon;
+          const isExpanded = expandedIds.has(result.id);
+
+          return (
+            <motion.div
+              key={result.id}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.05 }}
+            >
+              <Card className={`border transition-colors ${isExpanded ? config.border : "border-border"}`}>
+                <CardContent className="p-0">
+                  <button
+                    className="w-full px-5 py-4 flex items-center gap-4 text-left"
+                    onClick={() => toggleExpanded(result.id)}
+                  >
+                    <div className={`w-10 h-10 rounded-lg ${config.bg} flex items-center justify-center shrink-0`}>
+                      <Icon className={`w-5 h-5 ${config.color}`} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Badge variant={severity.color} className="text-[10px]">{severity.label}</Badge>
+                        <Badge variant="secondary" className="text-[10px]">{config.label}</Badge>
+                        <Badge variant="outline" className="text-[10px]">
+                          {result.source === "intake" ? "Intake" : "Document"}
+                        </Badge>
+                      </div>
+                      <h4 className="font-medium text-sm text-foreground truncate">{result.title}</h4>
+                    </div>
+                    {isExpanded ? (
+                      <ChevronUp className="w-5 h-5 text-muted-foreground shrink-0" />
+                    ) : (
+                      <ChevronDown className="w-5 h-5 text-muted-foreground shrink-0" />
+                    )}
+                  </button>
+
+                  <AnimatePresence>
+                    {isExpanded && (
+                      <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: "auto", opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.2 }}
+                        className="overflow-hidden"
+                      >
+                        <div className="px-5 pb-5 space-y-4 border-t border-border pt-4">
+                          <div>
+                            <h5 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
+                              Description
+                            </h5>
+                            <p className="text-sm text-foreground leading-relaxed">{result.description}</p>
+                          </div>
+                          <div>
+                            <h5 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
+                              Legal Basis
+                            </h5>
+                            <p className="text-sm text-foreground font-mono bg-secondary/50 p-3 rounded-md border border-border">
+                              {result.legalBasis}
+                            </p>
+                          </div>
+                          <div>
+                            <h5 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
+                              Suggested Strategy
+                            </h5>
+                            <p className="text-sm text-foreground leading-relaxed">{result.guidance}</p>
+                          </div>
+                          {result.documentRef && (
                             <div className="flex items-center gap-2 text-xs text-muted-foreground pt-1">
                               <FileText className="w-3 h-3" />
                               <span>Source: {result.documentRef} — Page {result.page}</span>
                             </div>
+                          )}
+                          <div className="flex items-center gap-2 pt-2 border-t border-border">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="text-xs h-7"
+                              onClick={() => setActiveTab("draft")}
+                            >
+                              <PenTool className="w-3 h-3 mr-1" />
+                              Use in Draft
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="text-xs h-7"
+                              onClick={() => setActiveTab("chat")}
+                            >
+                              <MessageSquare className="w-3 h-3 mr-1" />
+                              Ask AI About This
+                            </Button>
                           </div>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </CardContent>
-                </Card>
-              </motion.div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </CardContent>
+              </Card>
+            </motion.div>
+          );
+        })}
+      </div>
+    );
+  }
 }

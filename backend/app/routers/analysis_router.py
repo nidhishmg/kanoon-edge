@@ -23,6 +23,7 @@ def _result_to_response(r: AnalysisResult) -> AnalysisResultResponse:
         guidance=r.guidance or "",
         documentRef=r.document_ref or "",
         page=r.page or 0,
+        source=r.source or "document",
     )
 
 
@@ -72,8 +73,11 @@ async def run_analysis(
         applicable_sections=applicable_sections,
     )
 
-    # Clear previous results
-    db.query(AnalysisResult).filter(AnalysisResult.case_id == case_id).delete()
+    # Clear previous AI-generated results but preserve intake loopholes
+    db.query(AnalysisResult).filter(
+        AnalysisResult.case_id == case_id,
+        AnalysisResult.source != "intake",
+    ).delete()
 
     # Insert findings
     created = []
@@ -88,6 +92,7 @@ async def run_analysis(
             guidance=data.get("guidance", ""),
             document_ref=data.get("document_ref", ""),
             page=data.get("page", 0),
+            source="document",
         )
         db.add(ar)
         created.append(ar)

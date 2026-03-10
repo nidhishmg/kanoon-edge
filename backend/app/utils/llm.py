@@ -1,25 +1,30 @@
-"""LLM integration for analysis, chat (RAG), and draft generation using Anthropic Claude."""
+"""LLM integration for analysis, chat (RAG), and draft generation using Google Gemini."""
 import json
 import logging
 from typing import List, Optional
 
+from google import genai
+from google.genai import types
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 
+_client = None
+
 
 def _get_client():
-    """Get Anthropic client. Returns None if no API key configured."""
+    """Get Google GenAI client. Returns None if no API key configured."""
+    global _client
     settings = get_settings()
-    if not settings.ANTHROPIC_API_KEY:
+    if not settings.GEMINI_API_KEY:
         return None
-    from anthropic import Anthropic
-
-    return Anthropic(api_key=settings.ANTHROPIC_API_KEY)
+    if _client is None:
+        _client = genai.Client(api_key=settings.GEMINI_API_KEY)
+    return _client
 
 
 def _get_model() -> str:
-    return get_settings().ANTHROPIC_MODEL
+    return get_settings().GEMINI_MODEL
 
 
 def analyze_case_documents(
@@ -52,7 +57,7 @@ def analyze_case_documents(
 
     sections_str = ", ".join(applicable_sections) if applicable_sections else "Not specified"
 
-    system_prompt = """You are an expert Indian legal analyst AI. Analyze the case documents and identify:
+    prompt = f"""You are an expert Indian legal analyst AI. Analyze the case documents and identify:
 1. Legal loopholes (procedural violations, missing requirements)
 2. Contradictions between documents/statements
 3. Strong legal arguments for the defence
@@ -68,12 +73,7 @@ For each finding, provide:
 - document_ref: which document this relates to
 - page: estimated page number (use 1 if unknown)
 
-Return a JSON array of findings. Aim for 3-7 findings.
-
-IMPORTANT: Return ONLY valid JSON. No markdown, no code fences, no explanation outside JSON.
-Return a JSON object with a "findings" key containing the array."""
-
-    user_prompt = f"""Case: {case_title}
+Case: {case_title}
 Type: {case_type}
 Court: {court}
 Applicable Sections: {sections_str}
@@ -81,19 +81,20 @@ Applicable Sections: {sections_str}
 Documents:
 {doc_context}
 
-Analyze these documents and return findings as a JSON array."""
+IMPORTANT: Return ONLY valid JSON. No markdown, no code fences.
+Return a JSON object with a "findings" key containing the array of 3-7 findings."""
 
     try:
-        response = client.messages.create(
+        response = client.models.generate_content(
             model=_get_model(),
-            system=system_prompt,
-            messages=[
-                {"role": "user", "content": user_prompt},
-            ],
-            temperature=0.3,
-            max_tokens=3000,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                temperature=0.3,
+                max_output_tokens=3000,
+                response_mime_type="application/json",
+            ),
         )
-        content = response.content[0].text
+        content = response.text
         data = json.loads(content)
         findings = data.get("findings", data.get("results", []))
         if isinstance(findings, list):
@@ -121,12 +122,13 @@ def chat_with_context(
 
     context = "\n\n".join(document_chunks[:10])  # Top 10 relevant chunks
 
-    history_msgs = []
+    history_contents = []
     if chat_history:
         for msg in chat_history[-6:]:  # Last 6 messages
-            history_msgs.append({"role": msg["role"], "content": msg["content"]})
+            role = "user" if msg["role"] == "user" else "model"
+            history_contents.append(types.Content(role=role, parts=[types.Part.from_text(text=msg["content"])]))
 
-    system_prompt = f"""You are KanoonEdge AI, an expert Indian legal assistant analyzing the case "{case_title}".
+    system_instruction = f"""You are KanoonEdge AI, an expert Indian legal assistant analyzing the case "{case_title}".
 
 Answer the user's question based on the case documents provided below. Be specific, cite relevant sections and precedents.
 
@@ -137,20 +139,20 @@ Case Documents Context:
 
 Always respond in a helpful, professional manner. If you cannot find the answer in the documents, say so clearly."""
 
-    messages = []
-    messages.extend(history_msgs)
-    messages.append({"role": "user", "content": message})
+    # Add current user message
+    history_contents.append(types.Content(role="user", parts=[types.Part.from_text(text=message)]))
 
     try:
-        response = client.messages.create(
+        response = client.models.generate_content(
             model=_get_model(),
-            system=system_prompt,
-            messages=messages,
-            temperature=0.4,
-            max_tokens=1500,
+            contents=history_contents,
+            config=types.GenerateContentConfig(
+                system_instruction=system_instruction,
+                temperature=0.4,
+                max_output_tokens=1500,
+            ),
         )
-        content = response.content[0].text
-        return {"content": content, "citations": []}
+        return {"content": response.text, "citations": []}
     except Exception as e:
         logger.error(f"AI chat failed: {e}")
         return _fallback_chat(message)
@@ -187,10 +189,10 @@ def generate_legal_draft(
     }
     template_name = template_names.get(template_id, template_id)
 
-    system_prompt = """You are an expert Indian legal document drafter. Generate professional, court-ready legal documents.
-Follow proper Indian legal formatting with correct citations. Use formal legal language appropriate for Indian courts."""
+    prompt = f"""You are an expert Indian legal document drafter. Generate professional, court-ready legal documents.
+Follow proper Indian legal formatting with correct citations. Use formal legal language appropriate for Indian courts.
 
-    user_prompt = f"""Generate a {template_name} for the following case:
+Generate a {template_name} for the following case:
 
 Case Title: {case_title}
 Case Number: {case_number}
@@ -206,16 +208,15 @@ Context from case documents:
 Generate a complete, professional legal document ready for review and filing."""
 
     try:
-        response = client.messages.create(
+        response = client.models.generate_content(
             model=_get_model(),
-            system=system_prompt,
-            messages=[
-                {"role": "user", "content": user_prompt},
-            ],
-            temperature=0.3,
-            max_tokens=4000,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                temperature=0.3,
+                max_output_tokens=4000,
+            ),
         )
-        return response.content[0].text
+        return response.text
     except Exception as e:
         logger.error(f"AI draft generation failed: {e}")
         return _fallback_draft(template_id, case_title, case_number, court)
@@ -285,20 +286,20 @@ def _fallback_chat(message: str) -> dict:
             "I identified key contradictions in the witness statements. "
             "The FIR states the incident occurred at 10:30 PM while the first witness "
             "places it at 8:45 PM. This significantly weakens the prosecution's timeline.\n\n"
-            "**Note:** Connect your Anthropic API key for AI-powered analysis."
+            "**Note:** Connect your Gemini API key for AI-powered analysis."
         )
     elif "procedural" in lower or "violation" in lower:
         content = (
             "The charge sheet was filed 95 days after the FIR, exceeding the 90-day "
             "statutory limit under Section 167(2) CrPC. This creates an enforceable "
             "right to default bail.\n\n"
-            "**Note:** Connect your Anthropic API key for AI-powered analysis."
+            "**Note:** Connect your Gemini API key for AI-powered analysis."
         )
     else:
         content = (
             "Based on the case documents, the defense has several strong arguments. "
             "The most compelling is the procedural violation in charge sheet filing.\n\n"
-            "**Note:** Connect your Anthropic API key in .env for full AI-powered responses."
+            "**Note:** Connect your Gemini API key in .env for full AI-powered responses."
         )
     return {"content": content, "citations": []}
 

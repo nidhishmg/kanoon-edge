@@ -67,6 +67,29 @@ class Case(Base):
     client_email = Column(String(255), nullable=True)
     opposing_counsel = Column(String(255), nullable=True)
 
+    # Critical dates
+    incident_date = Column(String(20), nullable=True)
+    fir_date = Column(String(20), nullable=True)
+    arrest_date = Column(String(20), nullable=True)
+    in_custody = Column(Integer, default=0)                  # 0=No, 1=Yes
+    custody_start_date = Column(String(20), nullable=True)
+    charge_sheet_date = Column(String(20), nullable=True)
+    hearing_purpose = Column(String(255), nullable=True)
+
+    # Wizard metadata
+    court_level = Column(String(50), nullable=True)          # District/Sessions/High/Supreme/Tribunal
+    lawyer_side = Column(String(50), nullable=True)          # Petitioner/Respondent/Accused/Complainant
+
+    # Procedural checklist (for criminal cases) — "yes"/"no"/"unknown"
+    checklist_41a_notice = Column(String(10), nullable=True)
+    checklist_grounds_of_arrest = Column(String(10), nullable=True)
+    checklist_magistrate_24hrs = Column(String(10), nullable=True)
+    checklist_remand_case_diary = Column(String(10), nullable=True)
+    checklist_independent_witness = Column(String(10), nullable=True)
+
+    # Dismissed recommendations (JSON array of recommendation IDs)
+    dismissed_recommendations = Column(Text, nullable=True)
+
     created_at = Column(DateTime(timezone=True), default=utcnow)
     updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
@@ -179,6 +202,7 @@ class AnalysisResult(Base):
     document_ref = Column(String(500), nullable=True)
     page = Column(Integer, nullable=True)
     confidence = Column(Float, nullable=True)
+    source = Column(String(20), nullable=True, default="document")
     created_at = Column(DateTime(timezone=True), default=utcnow)
 
     case = relationship("Case", back_populates="analysis_results")

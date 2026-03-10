@@ -23,6 +23,23 @@ class CaseCreate(BaseModel):
     client_phone: Optional[str] = None
     client_email: Optional[str] = None
     opposing_counsel: Optional[str] = None
+    # Critical dates
+    incident_date: Optional[str] = None
+    fir_date: Optional[str] = None
+    arrest_date: Optional[str] = None
+    in_custody: Optional[bool] = False
+    custody_start_date: Optional[str] = None
+    charge_sheet_date: Optional[str] = None
+    hearing_purpose: Optional[str] = None
+    # Wizard metadata
+    court_level: Optional[str] = None
+    lawyer_side: Optional[str] = None
+    # Procedural checklist
+    checklist_41a_notice: Optional[str] = None
+    checklist_grounds_of_arrest: Optional[str] = None
+    checklist_magistrate_24hrs: Optional[str] = None
+    checklist_remand_case_diary: Optional[str] = None
+    checklist_independent_witness: Optional[str] = None
     parties: List["PartyCreate"] = []
 
 
@@ -84,3 +101,28 @@ class CaseRoomResponse(BaseModel):
     hearingCount: int = 0
     taskCount: int = 0
     noteCount: int = 0
+    # Critical dates
+    incidentDate: Optional[str] = None
+    firDate: Optional[str] = None
+    arrestDate: Optional[str] = None
+    inCustody: bool = False
+    custodyStartDate: Optional[str] = None
+    chargeSheetDate: Optional[str] = None
+    hearingPurpose: Optional[str] = None
+    # Wizard metadata
+    courtLevel: Optional[str] = None
+    lawyerSide: Optional[str] = None
+    # Procedural checklist
+    checklist41aNotice: Optional[str] = None
+    checklistGroundsOfArrest: Optional[str] = None
+    checklistMagistrate24hrs: Optional[str] = None
+    checklistRemandCaseDiary: Optional[str] = None
+    checklistIndependentWitness: Optional[str] = None
+    # Calculated fields
+    firDelayDays: Optional[int] = None
+    custodyDays: Optional[int] = None
+    chargeSheetDeadlineDays: Optional[int] = None
+    daysToNextHearing: Optional[int] = None
+    # Recommendations
+    recommendations: List[dict] = []
+    dismissedRecommendations: List[str] = []

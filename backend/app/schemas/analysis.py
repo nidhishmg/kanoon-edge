@@ -11,3 +11,4 @@ class AnalysisResultResponse(BaseModel):
     guidance: str
     documentRef: str
     page: int
+    source: str = "document"

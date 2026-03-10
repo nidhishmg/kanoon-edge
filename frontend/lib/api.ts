@@ -20,6 +20,7 @@ import {
   LegalResearchItem,
   Communication,
   JudgeProfile,
+  SectionClassification,
 } from "@/types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
@@ -98,6 +99,26 @@ interface BackendCaseRoom {
   hearingCount?: number;
   taskCount?: number;
   noteCount?: number;
+  incidentDate?: string;
+  firDate?: string;
+  arrestDate?: string;
+  inCustody?: boolean;
+  custodyStartDate?: string;
+  chargeSheetDate?: string;
+  hearingPurpose?: string;
+  courtLevel?: string;
+  lawyerSide?: string;
+  checklist41aNotice?: string;
+  checklistGroundsOfArrest?: string;
+  checklistMagistrate24hrs?: string;
+  checklistRemandCaseDiary?: string;
+  checklistIndependentWitness?: string;
+  firDelayDays?: number;
+  custodyDays?: number;
+  chargeSheetDeadlineDays?: number;
+  daysToNextHearing?: number;
+  recommendations?: { id: string; action: string; reason: string; button?: string; tab?: string }[];
+  dismissedRecommendations?: string[];
 }
 
 function toCaseRoom(c: BackendCaseRoom): CaseRoom {
@@ -132,6 +153,26 @@ function toCaseRoom(c: BackendCaseRoom): CaseRoom {
     hearingCount: c.hearingCount,
     taskCount: c.taskCount,
     noteCount: c.noteCount,
+    incidentDate: c.incidentDate,
+    firDate: c.firDate,
+    arrestDate: c.arrestDate,
+    inCustody: c.inCustody,
+    custodyStartDate: c.custodyStartDate,
+    chargeSheetDate: c.chargeSheetDate,
+    hearingPurpose: c.hearingPurpose,
+    courtLevel: c.courtLevel as CaseRoom["courtLevel"],
+    lawyerSide: c.lawyerSide as CaseRoom["lawyerSide"],
+    checklist41aNotice: c.checklist41aNotice as CaseRoom["checklist41aNotice"],
+    checklistGroundsOfArrest: c.checklistGroundsOfArrest as CaseRoom["checklistGroundsOfArrest"],
+    checklistMagistrate24hrs: c.checklistMagistrate24hrs as CaseRoom["checklistMagistrate24hrs"],
+    checklistRemandCaseDiary: c.checklistRemandCaseDiary as CaseRoom["checklistRemandCaseDiary"],
+    checklistIndependentWitness: c.checklistIndependentWitness as CaseRoom["checklistIndependentWitness"],
+    firDelayDays: c.firDelayDays,
+    custodyDays: c.custodyDays,
+    chargeSheetDeadlineDays: c.chargeSheetDeadlineDays,
+    daysToNextHearing: c.daysToNextHearing,
+    recommendations: c.recommendations,
+    dismissedRecommendations: c.dismissedRecommendations,
   };
 }
 
@@ -167,6 +208,7 @@ interface BackendAnalysisResult {
   guidance: string;
   documentRef: string;
   page: number;
+  source?: string;
 }
 
 function toAnalysisResult(r: BackendAnalysisResult): AnalysisResult {
@@ -180,6 +222,7 @@ function toAnalysisResult(r: BackendAnalysisResult): AnalysisResult {
     guidance: r.guidance,
     documentRef: r.documentRef,
     page: r.page,
+    source: (r.source as AnalysisResult["source"]) || "document",
   };
 }
 
@@ -282,6 +325,20 @@ export const api = {
       client_phone?: string;
       client_email?: string;
       opposing_counsel?: string;
+      incident_date?: string;
+      fir_date?: string;
+      arrest_date?: string;
+      in_custody?: boolean;
+      custody_start_date?: string;
+      charge_sheet_date?: string;
+      hearing_purpose?: string;
+      court_level?: string;
+      lawyer_side?: string;
+      checklist_41a_notice?: string;
+      checklist_grounds_of_arrest?: string;
+      checklist_magistrate_24hrs?: string;
+      checklist_remand_case_diary?: string;
+      checklist_independent_witness?: string;
       parties?: { name: string; role: string; notes?: string; party_type?: string; advocate_name?: string; bar_council_number?: string; contact_phone?: string; contact_email?: string; address?: string }[];
     }): Promise<CaseRoom> => {
       const data = await apiFetch<BackendCaseRoom>("/cases/", {
@@ -289,6 +346,15 @@ export const api = {
         body: JSON.stringify(caseData),
       });
       return toCaseRoom(data);
+    },
+    dismissRecommendation: async (caseId: string, recommendationId: string): Promise<void> => {
+      await apiFetch(`/cases/${caseId}/dismiss-recommendation`, {
+        method: "POST",
+        body: JSON.stringify({ recommendationId }),
+      });
+    },
+    classifySections: async (sections: string[]): Promise<SectionClassification[]> => {
+      return apiFetch<SectionClassification[]>(`/cases/sections/classify?sections=${encodeURIComponent(sections.join(","))}`);
     },
   },
 
@@ -351,7 +417,10 @@ export const api = {
       });
       return toChatMessage(data);
     },
-    getSuggestedQuestions: async (): Promise<string[]> => {
+    getSuggestedQuestions: async (caseId?: string): Promise<string[]> => {
+      if (caseId) {
+        return apiFetch<string[]>(`/chat/${caseId}/suggested-questions`);
+      }
       return apiFetch<string[]>("/chat/suggested-questions");
     },
   },

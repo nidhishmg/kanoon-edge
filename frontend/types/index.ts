@@ -1,8 +1,31 @@
 // ─── Case Room ───────────────────────────────────────────────
 
-export type CaseType = "Criminal" | "Civil" | "Civil - Tax" | "Civil - Property" | "Corporate" | "Family" | "Property" | "Other";
-export type CaseStage = "Investigation" | "Bail Stage" | "Evidence" | "Arguments" | "Trial" | "Mediation" | "Discovery" | "Appeal" | "Judgment Pending";
+export type CaseType = "Criminal" | "Civil" | "Civil - Tax" | "Civil - Property" | "Corporate" | "Family" | "Property" | "Bail" | "Writ" | "Labour" | "Other";
+export type CaseStage = "Investigation" | "Pre-Arrest" | "Bail Stage" | "Bail" | "Charge Framing" | "Evidence" | "Arguments" | "Trial" | "Mediation" | "Discovery" | "Appeal" | "Judgment Pending";
 export type PartyRole = "Accused" | "Petitioner" | "Respondent" | "Complainant" | "Witness" | "Lawyer";
+export type CourtLevel = "Magistrate" | "Sessions" | "High Court" | "Supreme Court" | "Tribunal" | "Other";
+export type LawyerSide = "defence" | "prosecution" | "petitioner" | "respondent";
+export type ChecklistValue = "yes" | "no" | "unknown";
+
+export interface Recommendation {
+  id: string;
+  action: string;
+  reason: string;
+  button?: string;
+  tab?: string;
+}
+
+export interface SectionClassification {
+  raw: string;
+  code: string;
+  section: string;
+  title: string;
+  max_punishment: string;
+  bailable: string;
+  cognizable: string;
+  over_7_years: boolean;
+  found: boolean;
+}
 
 export interface Party {
   id: string;
@@ -32,7 +55,7 @@ export interface CaseRoom {
   createdAt: string;
   parties: Party[];
   venue: string;
-  // New fields
+  // Existing fields
   filingDate?: string;
   filingNumber?: string;
   firNumber?: string;
@@ -49,6 +72,28 @@ export interface CaseRoom {
   hearingCount?: number;
   taskCount?: number;
   noteCount?: number;
+  // New intake fields
+  incidentDate?: string;
+  firDate?: string;
+  arrestDate?: string;
+  inCustody?: boolean;
+  custodyStartDate?: string;
+  chargeSheetDate?: string;
+  hearingPurpose?: string;
+  courtLevel?: CourtLevel;
+  lawyerSide?: LawyerSide;
+  checklist41aNotice?: ChecklistValue;
+  checklistGroundsOfArrest?: ChecklistValue;
+  checklistMagistrate24hrs?: ChecklistValue;
+  checklistRemandCaseDiary?: ChecklistValue;
+  checklistIndependentWitness?: ChecklistValue;
+  // Calculated fields
+  firDelayDays?: number;
+  custodyDays?: number;
+  chargeSheetDeadlineDays?: number;
+  daysToNextHearing?: number;
+  recommendations?: Recommendation[];
+  dismissedRecommendations?: string[];
 }
 
 // ─── Wizard ──────────────────────────────────────────────────
@@ -74,6 +119,20 @@ export interface CaseWizardData {
     clientPhone?: string;
     clientEmail?: string;
     opposingCounsel?: string;
+    courtLevel?: CourtLevel;
+    lawyerSide?: LawyerSide;
+    incidentDate?: string;
+    firDate?: string;
+    arrestDate?: string;
+    inCustody?: boolean;
+    custodyStartDate?: string;
+    chargeSheetDate?: string;
+    hearingPurpose?: string;
+    checklist41aNotice?: ChecklistValue;
+    checklistGroundsOfArrest?: ChecklistValue;
+    checklistMagistrate24hrs?: ChecklistValue;
+    checklistRemandCaseDiary?: ChecklistValue;
+    checklistIndependentWitness?: ChecklistValue;
   };
   parties: Party[];
   documents: File[];
@@ -105,6 +164,7 @@ export interface AnalysisResult {
   guidance: string;
   documentRef: string;
   page: number;
+  source?: "intake" | "document";
 }
 
 export type AnalysisStage =

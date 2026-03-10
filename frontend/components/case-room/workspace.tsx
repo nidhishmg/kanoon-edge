@@ -28,6 +28,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { formatDate, getStrengthColor } from "@/lib/utils";
+import { useCaseRoomStore } from "@/lib/store";
 import { OverviewTab } from "@/components/case-room/overview-tab";
 import { DocumentsTab } from "@/components/case-room/documents-tab";
 import { AnalysisTab } from "@/components/case-room/analysis-tab";
@@ -65,6 +66,7 @@ const tabItems = [
 ];
 
 export function CaseRoomWorkspace({ caseRoom }: WorkspaceProps) {
+  const { activeTab, setActiveTab } = useCaseRoomStore();
   const strengthVariant =
     caseRoom.strength >= 75 ? "success" : caseRoom.strength >= 50 ? "warning" : "destructive";
 
@@ -120,7 +122,7 @@ export function CaseRoomWorkspace({ caseRoom }: WorkspaceProps) {
       </motion.div>
 
       {/* Tabs */}
-      <Tabs defaultValue="overview">
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="w-full overflow-x-auto">
           {tabItems.map((tab) => {
             const Icon = tab.icon;
