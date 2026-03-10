@@ -1,4 +1,4 @@
-"""LLM integration for analysis, chat (RAG), and draft generation."""
+"""LLM integration for analysis, chat (RAG), and draft generation using Anthropic Claude."""
 import json
 import logging
 from typing import List, Optional
@@ -9,17 +9,17 @@ logger = logging.getLogger(__name__)
 
 
 def _get_client():
-    """Get OpenAI client. Returns None if no API key configured."""
+    """Get Anthropic client. Returns None if no API key configured."""
     settings = get_settings()
-    if not settings.OPENAI_API_KEY:
+    if not settings.ANTHROPIC_API_KEY:
         return None
-    from openai import OpenAI
+    from anthropic import Anthropic
 
-    return OpenAI(api_key=settings.OPENAI_API_KEY)
+    return Anthropic(api_key=settings.ANTHROPIC_API_KEY)
 
 
 def _get_model() -> str:
-    return get_settings().OPENAI_MODEL
+    return get_settings().ANTHROPIC_MODEL
 
 
 def analyze_case_documents(
@@ -68,7 +68,10 @@ For each finding, provide:
 - document_ref: which document this relates to
 - page: estimated page number (use 1 if unknown)
 
-Return a JSON array of findings. Aim for 3-7 findings."""
+Return a JSON array of findings. Aim for 3-7 findings.
+
+IMPORTANT: Return ONLY valid JSON. No markdown, no code fences, no explanation outside JSON.
+Return a JSON object with a "findings" key containing the array."""
 
     user_prompt = f"""Case: {case_title}
 Type: {case_type}
@@ -81,17 +84,16 @@ Documents:
 Analyze these documents and return findings as a JSON array."""
 
     try:
-        response = client.chat.completions.create(
+        response = client.messages.create(
             model=_get_model(),
+            system=system_prompt,
             messages=[
-                {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
-            response_format={"type": "json_object"},
             temperature=0.3,
             max_tokens=3000,
         )
-        content = response.choices[0].message.content
+        content = response.content[0].text
         data = json.loads(content)
         findings = data.get("findings", data.get("results", []))
         if isinstance(findings, list):
@@ -135,18 +137,19 @@ Case Documents Context:
 
 Always respond in a helpful, professional manner. If you cannot find the answer in the documents, say so clearly."""
 
-    messages = [{"role": "system", "content": system_prompt}]
+    messages = []
     messages.extend(history_msgs)
     messages.append({"role": "user", "content": message})
 
     try:
-        response = client.chat.completions.create(
+        response = client.messages.create(
             model=_get_model(),
+            system=system_prompt,
             messages=messages,
             temperature=0.4,
             max_tokens=1500,
         )
-        content = response.choices[0].message.content
+        content = response.content[0].text
         return {"content": content, "citations": []}
     except Exception as e:
         logger.error(f"AI chat failed: {e}")
@@ -203,16 +206,16 @@ Context from case documents:
 Generate a complete, professional legal document ready for review and filing."""
 
     try:
-        response = client.chat.completions.create(
+        response = client.messages.create(
             model=_get_model(),
+            system=system_prompt,
             messages=[
-                {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
             temperature=0.3,
             max_tokens=4000,
         )
-        return response.choices[0].message.content
+        return response.content[0].text
     except Exception as e:
         logger.error(f"AI draft generation failed: {e}")
         return _fallback_draft(template_id, case_title, case_number, court)
@@ -282,20 +285,20 @@ def _fallback_chat(message: str) -> dict:
             "I identified key contradictions in the witness statements. "
             "The FIR states the incident occurred at 10:30 PM while the first witness "
             "places it at 8:45 PM. This significantly weakens the prosecution's timeline.\n\n"
-            "**Note:** Connect your OpenAI API key for AI-powered analysis."
+            "**Note:** Connect your Anthropic API key for AI-powered analysis."
         )
     elif "procedural" in lower or "violation" in lower:
         content = (
             "The charge sheet was filed 95 days after the FIR, exceeding the 90-day "
             "statutory limit under Section 167(2) CrPC. This creates an enforceable "
             "right to default bail.\n\n"
-            "**Note:** Connect your OpenAI API key for AI-powered analysis."
+            "**Note:** Connect your Anthropic API key for AI-powered analysis."
         )
     else:
         content = (
             "Based on the case documents, the defense has several strong arguments. "
             "The most compelling is the procedural violation in charge sheet filing.\n\n"
-            "**Note:** Connect your OpenAI API key in .env for full AI-powered responses."
+            "**Note:** Connect your Anthropic API key in .env for full AI-powered responses."
         )
     return {"content": content, "citations": []}
 

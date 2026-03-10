@@ -18,9 +18,9 @@ class Settings(BaseSettings):
     # File storage (local for dev, S3 for prod)
     UPLOAD_DIR: str = "uploads"
 
-    # OpenAI
-    OPENAI_API_KEY: str = ""
-    OPENAI_MODEL: str = "gpt-4o-mini"
+    # Anthropic Claude
+    ANTHROPIC_API_KEY: str = ""
+    ANTHROPIC_MODEL: str = "claude-sonnet-4-20250514"
 
     model_config = {"env_file": ".env", "extra": "ignore"}
 
