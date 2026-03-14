@@ -75,10 +75,21 @@ const typeConfig = {
 };
 
 const severityConfig = {
+  critical: { color: "destructive" as const, label: "Critical" },
   high: { color: "destructive" as const, label: "High Severity" },
   medium: { color: "warning" as const, label: "Medium" },
   low: { color: "secondary" as const, label: "Low" },
 };
+
+const fallbackTypeConfig = {
+  icon: AlertTriangle,
+  color: "text-muted-foreground",
+  bg: "bg-muted/40",
+  border: "border-border",
+  label: "Finding",
+};
+
+const fallbackSeverity = { color: "secondary" as const, label: "Info" };
 
 const stageIcons = {
   reading: BookOpen,
@@ -96,6 +107,7 @@ export function AnalysisTab({ caseId }: AnalysisTabProps) {
   const [progress, setProgress] = useState(0);
   const { analysisResults, setAnalysisResults } = useCaseRoomStore();
   const setActiveTab = useCaseRoomStore((s) => s.setActiveTab);
+  const setPrefilledMessage = useCaseRoomStore((s) => s.setPrefilledMessage);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
   useQuery({
@@ -303,8 +315,8 @@ export function AnalysisTab({ caseId }: AnalysisTabProps) {
     return (
       <div className="space-y-3">
         {results.map((result, i) => {
-          const config = typeConfig[result.type];
-          const severity = severityConfig[result.severity];
+          const config = typeConfig[result.type as keyof typeof typeConfig] || fallbackTypeConfig;
+          const severity = severityConfig[result.severity as keyof typeof severityConfig] || fallbackSeverity;
           const Icon = config.icon;
           const isExpanded = expandedIds.has(result.id);
 
@@ -391,7 +403,10 @@ export function AnalysisTab({ caseId }: AnalysisTabProps) {
                               variant="outline"
                               size="sm"
                               className="text-xs h-7"
-                              onClick={() => setActiveTab("chat")}
+                              onClick={() => {
+                                setPrefilledMessage(`Explain this finding: ${result.title} — ${result.description}`);
+                                setActiveTab("chat");
+                              }}
                             >
                               <MessageSquare className="w-3 h-3 mr-1" />
                               Ask AI About This

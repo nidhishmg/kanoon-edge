@@ -222,6 +222,77 @@ Generate a complete, professional legal document ready for review and filing."""
         return _fallback_draft(template_id, case_title, case_number, court)
 
 
+def generate_research_brief_text(
+    *,
+    case_type: str,
+    stage: str,
+    client_name: str,
+    sections: List[str],
+    findings: List[dict],
+) -> Optional[str]:
+    """Generate structured legal research brief from analysis findings.
+
+    Returns None when no API key is configured or if generation fails.
+    """
+    client = _get_client()
+    if not client:
+        return None
+
+    findings_lines = []
+    for f in findings:
+        findings_lines.append(
+            "\n".join([
+                f"- title: {f.get('title', '')}",
+                f"  type: {f.get('type', f.get('result_type', ''))}",
+                f"  severity: {f.get('severity', '')}",
+                f"  description: {f.get('description', '')}",
+                f"  legalBasis: {f.get('legalBasis', f.get('legal_basis', ''))}",
+                f"  guidance: {f.get('guidance', '')}",
+            ])
+        )
+
+    sections_str = ", ".join(sections or [])
+
+    system_instruction = (
+        "You are a legal research assistant for an Indian lawyer. "
+        "Generate a structured research brief based only on the case facts and analysis results provided. "
+        "Do not invent case citations. Do not reference any judgment not explicitly listed in the analysis results. "
+        "If no verified judgment applies to a finding, write 'Further research needed' for that point. "
+        "Output must have exactly three sections with these exact headings: "
+        "RELEVANT PRECEDENTS, COUNTER-ARGUMENTS TO ANTICIPATE, CROSS-EXAMINATION QUESTIONS. "
+        "Write in formal legal English suitable for an Indian advocate."
+    )
+
+    prompt = (
+        f"Case type: {case_type}\n"
+        f"Stage: {stage}\n"
+        f"Client: {client_name}\n"
+        f"Sections applied: {sections_str}\n\n"
+        "Analysis findings:\n"
+        + "\n\n".join(findings_lines)
+        + "\n\n"
+        "Instructions:\n"
+        "RELEVANT PRECEDENTS section: For each analysis finding that has a legalBasis citation, write one paragraph explaining what that judgment held and exactly why it applies to this specific case. Reference the actual case facts from the findings, not generic statements.\n\n"
+        "COUNTER-ARGUMENTS TO ANTICIPATE section: List each counter-argument from the analysis findings. For each, write one sentence on what the prosecution or opposing party will argue, and one sentence on how to respond.\n\n"
+        "CROSS-EXAMINATION QUESTIONS section: Only include contradiction-driven questions when contradiction findings exist. For each contradiction finding, write 3 specific cross-examination questions that exploit the exact contradiction described and reference the discrepancy found."
+    )
+
+    try:
+        response = client.models.generate_content(
+            model=_get_model(),
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                system_instruction=system_instruction,
+                temperature=0,
+                max_output_tokens=2000,
+            ),
+        )
+        return (response.text or "").strip() or None
+    except Exception as e:
+        logger.error(f"Research brief generation failed: {e}")
+        return None
+
+
 # === Fallback responses when no API key is configured ===
 
 def _fallback_analysis() -> List[dict]:

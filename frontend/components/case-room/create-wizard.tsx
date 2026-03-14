@@ -3,6 +3,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -27,7 +28,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import type { CaseType, CaseStage, PartyRole, CourtLevel, LawyerSide, ChecklistValue, SectionClassification } from "@/types";
+import type { CaseType, CaseStage, PartyRole, CourtLevel, LawyerSide, ChecklistValue, SectionClassification, ClientListItem } from "@/types";
 import { api } from "@/lib/api";
 
 // ─── Schemas ─────────────────────────────────────────────────
@@ -99,17 +100,42 @@ const LAWYER_SIDES: LawyerSide[] = ["defence", "prosecution", "petitioner", "res
 
 // ─── Date calculation helpers ────────────────────────────────
 
+function parseFlexibleDate(value: string): Date | null {
+  if (!value) return null;
+  const raw = value.trim();
+  if (!raw) return null;
+
+  // Accept ISO first (yyyy-mm-dd), which is what backend and native date pickers use.
+  const isoMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (isoMatch) {
+    const d = new Date(`${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}T00:00:00`);
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  // Accept dd/mm/yyyy and dd-mm-yyyy for manual typing.
+  const dmyMatch = raw.match(/^(\d{2})[\/-](\d{2})[\/-](\d{4})$/);
+  if (dmyMatch) {
+    const d = new Date(`${dmyMatch[3]}-${dmyMatch[2]}-${dmyMatch[1]}T00:00:00`);
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  const parsed = new Date(raw);
+  return isNaN(parsed.getTime()) ? null : parsed;
+}
+
 function daysBetween(dateA: string, dateB: string): number | null {
   if (!dateA || !dateB) return null;
-  const a = new Date(dateA);
-  const b = new Date(dateB);
+  const a = parseFlexibleDate(dateA);
+  const b = parseFlexibleDate(dateB);
+  if (!a || !b) return null;
   if (isNaN(a.getTime()) || isNaN(b.getTime())) return null;
   return Math.round((b.getTime() - a.getTime()) / (1000 * 60 * 60 * 24));
 }
 
 function daysFromToday(dateStr: string): number | null {
   if (!dateStr) return null;
-  const d = new Date(dateStr);
+  const d = parseFlexibleDate(dateStr);
+  if (!d) return null;
   if (isNaN(d.getTime())) return null;
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -209,6 +235,17 @@ export function CreateWizard({ onClose }: CreateWizardProps) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sectionClassifications, setSectionClassifications] = useState<SectionClassification[]>([]);
+  const [clientMode, setClientMode] = useState<"manual" | "existing" | "new">("manual");
+  const [clientSearch, setClientSearch] = useState("");
+  const [clientSearchDebounced, setClientSearchDebounced] = useState("");
+  const [selectedExistingClientId, setSelectedExistingClientId] = useState("");
+  const [selectedExistingClientLabel, setSelectedExistingClientLabel] = useState("");
+  const [newClient, setNewClient] = useState({
+    full_name: "",
+    primary_phone: "",
+    date_of_birth: "",
+    occupation: "",
+  });
 
   // Step 1 — Case Identity
   const step1Form = useForm<Step1Form>({
@@ -241,6 +278,17 @@ export function CreateWizard({ onClose }: CreateWizardProps) {
   const s4 = step4Form.watch();
 
   const isCriminal = ["Criminal", "Bail"].includes(s1.caseType);
+
+  useEffect(() => {
+    const t = setTimeout(() => setClientSearchDebounced(clientSearch.trim()), 300);
+    return () => clearTimeout(t);
+  }, [clientSearch]);
+
+  const { data: clientSearchResults = [] } = useQuery({
+    queryKey: ["wizard-client-search", clientSearchDebounced],
+    queryFn: () => api.client.list(clientSearchDebounced),
+    enabled: clientMode === "existing" && clientSearchDebounced.length > 0,
+  });
 
   // Date pills
   const firDelay = useMemo(() => daysBetween(s2.incidentDate || "", s2.firDate || ""), [s2.incidentDate, s2.firDate]);
@@ -292,11 +340,67 @@ export function CreateWizard({ onClose }: CreateWizardProps) {
 
   const handleCreate = async () => {
     if (!(await step4Form.trigger())) return;
+
+    if (clientMode === "existing" && !selectedExistingClientId) {
+      setError("Please select an existing client.");
+      return;
+    }
+    if (clientMode === "new" && (!newClient.full_name.trim() || !newClient.primary_phone.trim())) {
+      setError("New client requires full name and primary phone.");
+      return;
+    }
+
     setSubmitting(true);
     setError(null);
     try {
       const sectionsStr = s4.applicableSections?.trim();
       const applicableSections = sectionsStr ? sectionsStr.split(",").map((s: string) => s.trim()).filter(Boolean) : undefined;
+
+      let clientId: string | undefined;
+      let clientData: Record<string, unknown> | undefined;
+
+      if (clientMode === "existing") {
+        clientId = selectedExistingClientId || undefined;
+      } else if (clientMode === "new") {
+        clientData = {
+          full_name: newClient.full_name,
+          primary_phone: newClient.primary_phone,
+          date_of_birth: newClient.date_of_birth || undefined,
+          occupation: newClient.occupation || undefined,
+        };
+      }
+
+      const roleBySide: Record<string, string> = {
+        defence: "Accused",
+        prosecution: "Complainant",
+        petitioner: "Petitioner",
+        respondent: "Respondent",
+      };
+      const clientPartyRole = roleBySide[(s1.lawyerSide || "").toLowerCase()] || "Petitioner";
+
+      const clientNameForParty =
+        clientMode === "new"
+          ? newClient.full_name
+          : clientMode === "existing"
+          ? selectedExistingClientLabel
+          : s1.clientName;
+
+      const partiesPayload = s4.parties
+        .filter((p) => p.name)
+        .map((p) => ({ name: p.name, role: p.role, notes: p.notes || "" }));
+
+      if (clientNameForParty) {
+        const hasClientParty = partiesPayload.some(
+          (p) => p.name.trim().toLowerCase() === clientNameForParty.trim().toLowerCase()
+        );
+        if (!hasClientParty) {
+          partiesPayload.unshift({
+            name: clientNameForParty,
+            role: clientPartyRole,
+            notes: "Auto-filled from linked client",
+          });
+        }
+      }
 
       const created = await api.caseRooms.create({
         title: s1.title,
@@ -309,6 +413,8 @@ export function CreateWizard({ onClose }: CreateWizardProps) {
         client_name: s1.clientName || undefined,
         client_phone: s1.clientPhone || undefined,
         client_email: s1.clientEmail || undefined,
+        client_id: clientId,
+        client_data: clientData,
         opposing_counsel: s1.opposingCounsel || undefined,
         case_description: s1.caseDescription || undefined,
         priority: s1.priority || undefined,
@@ -332,9 +438,7 @@ export function CreateWizard({ onClose }: CreateWizardProps) {
         checklist_remand_case_diary: (isCriminal ? s3.checklistRemandCaseDiary : undefined) || undefined,
         checklist_independent_witness: (isCriminal ? s3.checklistIndependentWitness : undefined) || undefined,
         applicable_sections: applicableSections,
-        parties: s4.parties
-          .filter((p) => p.name)
-          .map((p) => ({ name: p.name, role: p.role, notes: p.notes || "" })),
+        parties: partiesPayload,
       });
 
       router.push(`/dashboard/case-rooms/${created.id}`);
@@ -458,11 +562,11 @@ export function CreateWizard({ onClose }: CreateWizardProps) {
                       <div className="grid grid-cols-2 gap-4">
                         <div>
                           <label className="block text-sm font-medium text-foreground mb-1.5">Incident/Offence Date</label>
-                          <Input type="date" {...step2Form.register("incidentDate")} />
+                          <Input placeholder="YYYY-MM-DD or DD/MM/YYYY" {...step2Form.register("incidentDate")} />
                         </div>
                         <div>
                           <label className="block text-sm font-medium text-foreground mb-1.5">FIR Date</label>
-                          <Input type="date" {...step2Form.register("firDate")} />
+                          <Input placeholder="YYYY-MM-DD or DD/MM/YYYY" {...step2Form.register("firDate")} />
                         </div>
                       </div>
 
@@ -487,11 +591,11 @@ export function CreateWizard({ onClose }: CreateWizardProps) {
                       <div className="grid grid-cols-2 gap-4">
                         <div>
                           <label className="block text-sm font-medium text-foreground mb-1.5">Arrest Date</label>
-                          <Input type="date" {...step2Form.register("arrestDate")} />
+                          <Input placeholder="YYYY-MM-DD or DD/MM/YYYY" {...step2Form.register("arrestDate")} />
                         </div>
                         <div>
                           <label className="block text-sm font-medium text-foreground mb-1.5">Charge Sheet Date</label>
-                          <Input type="date" {...step2Form.register("chargeSheetDate")} />
+                          <Input placeholder="YYYY-MM-DD or DD/MM/YYYY" {...step2Form.register("chargeSheetDate")} />
                         </div>
                       </div>
 
@@ -502,7 +606,7 @@ export function CreateWizard({ onClose }: CreateWizardProps) {
                         </label>
                         {s2.inCustody && (
                           <div className="flex-1">
-                            <Input type="date" {...step2Form.register("custodyStartDate")} />
+                            <Input placeholder="YYYY-MM-DD or DD/MM/YYYY" {...step2Form.register("custodyStartDate")} />
                           </div>
                         )}
                       </div>
@@ -519,7 +623,7 @@ export function CreateWizard({ onClose }: CreateWizardProps) {
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-foreground mb-1.5">Next Hearing Date <span className="text-danger">*</span></label>
-                      <Input type="date" {...step2Form.register("nextHearing")} />
+                      <Input placeholder="YYYY-MM-DD or DD/MM/YYYY" {...step2Form.register("nextHearing")} />
                       {step2Form.formState.errors.nextHearing && <p className="text-xs text-danger mt-1">{step2Form.formState.errors.nextHearing.message}</p>}
                     </div>
                     <div>
@@ -539,7 +643,7 @@ export function CreateWizard({ onClose }: CreateWizardProps) {
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <label className="block text-xs text-muted-foreground mb-1">Filing Date</label>
-                        <Input type="date" {...step2Form.register("filingDate")} />
+                        <Input placeholder="YYYY-MM-DD or DD/MM/YYYY" {...step2Form.register("filingDate")} />
                       </div>
                       <div>
                         <label className="block text-xs text-muted-foreground mb-1">Filing Number</label>
@@ -601,6 +705,47 @@ export function CreateWizard({ onClose }: CreateWizardProps) {
               {/* ─── STEP 3: Parties & Sections ────────── */}
               {step === 3 && (
                 <motion.div key="step-3" initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -30 }} transition={{ duration: 0.2 }} className="space-y-5">
+                  <div className="space-y-3 rounded-lg border border-border p-3 bg-card/40">
+                    <p className="text-sm font-medium text-foreground">Link Client</p>
+                    <div className="space-y-2 text-sm">
+                      <label className="flex items-center gap-2"><input type="radio" checked={clientMode === "existing"} onChange={() => setClientMode("existing")} /> Search existing client</label>
+                      <label className="flex items-center gap-2"><input type="radio" checked={clientMode === "new"} onChange={() => setClientMode("new")} /> Create new client</label>
+                      <label className="flex items-center gap-2"><input type="radio" checked={clientMode === "manual"} onChange={() => setClientMode("manual")} /> Add manually</label>
+                    </div>
+
+                    {clientMode === "existing" ? (
+                      <div className="space-y-2">
+                        <Input placeholder="Search by name or phone" value={clientSearch} onChange={(e) => setClientSearch(e.target.value)} />
+                        {clientSearchResults.length > 0 ? (
+                          <div className="max-h-32 overflow-auto rounded-md border p-2 space-y-1">
+                            {clientSearchResults.map((c: ClientListItem) => (
+                              <button
+                                key={c.id}
+                                className={`w-full text-left rounded px-2 py-1 ${selectedExistingClientId === c.id ? "bg-secondary" : "hover:bg-secondary/60"}`}
+                                onClick={() => {
+                                  setSelectedExistingClientId(c.id);
+                                  setSelectedExistingClientLabel(c.full_name);
+                                }}
+                              >
+                                <p className="text-sm font-medium">{c.full_name}</p>
+                                <p className="text-xs text-muted-foreground">{c.primary_phone}</p>
+                              </button>
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
+
+                    {clientMode === "new" ? (
+                      <div className="grid grid-cols-2 gap-2">
+                        <Input placeholder="Full name *" value={newClient.full_name} onChange={(e) => setNewClient((s) => ({ ...s, full_name: e.target.value }))} />
+                        <Input placeholder="Primary phone *" value={newClient.primary_phone} onChange={(e) => setNewClient((s) => ({ ...s, primary_phone: e.target.value }))} />
+                        <Input placeholder="Date of birth" value={newClient.date_of_birth} onChange={(e) => setNewClient((s) => ({ ...s, date_of_birth: e.target.value }))} />
+                        <Input placeholder="Occupation" value={newClient.occupation} onChange={(e) => setNewClient((s) => ({ ...s, occupation: e.target.value }))} />
+                      </div>
+                    ) : null}
+                  </div>
+
                   <div className="space-y-3">
                     <p className="text-sm font-medium text-foreground">Parties Involved</p>
                     <div className="space-y-3 max-h-[200px] overflow-y-auto pr-1">

@@ -2,14 +2,17 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
 import json
+from datetime import datetime, timezone, timedelta
+import logging
 
 from app.database import get_db
-from app.models import User, Case, Document, AnalysisResult, TimelineEvent
+from app.models import User, Case, Document, AnalysisResult, TimelineEvent, CaseNote
 from app.schemas.analysis import AnalysisResultResponse
 from app.utils.auth import get_current_user
-from app.utils.llm import analyze_case_documents
+from app.utils.llm import analyze_case_documents, generate_research_brief_text
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 def _result_to_response(r: AnalysisResult) -> AnalysisResultResponse:
@@ -25,6 +28,77 @@ def _result_to_response(r: AnalysisResult) -> AnalysisResultResponse:
         page=r.page or 0,
         source=r.source or "document",
     )
+
+
+def _upsert_auto_research_note(
+    db: Session,
+    *,
+    case: Case,
+    user_id: str,
+    findings: List[AnalysisResult],
+) -> None:
+    """Create or refresh one auto-generated research note with a 24h cool-down."""
+    now = datetime.now(timezone.utc)
+    existing = (
+        db.query(CaseNote)
+        .filter(
+            CaseNote.case_id == case.id,
+            CaseNote.note_type == "research",
+            CaseNote.title == "Auto Research Brief",
+        )
+        .order_by(CaseNote.updated_at.desc())
+        .first()
+    )
+
+    if existing and existing.updated_at:
+        last_update = existing.updated_at
+        if last_update.tzinfo is None:
+            last_update = last_update.replace(tzinfo=timezone.utc)
+        if now - last_update < timedelta(hours=24):
+            return
+
+    findings_payload = [
+        {
+            "type": item.result_type,
+            "severity": item.severity,
+            "title": item.title,
+            "description": item.description,
+            "legal_basis": item.legal_basis,
+            "guidance": item.guidance,
+        }
+        for item in findings
+    ]
+
+    sections = []
+    if case.applicable_sections:
+        try:
+            sections = json.loads(case.applicable_sections)
+        except (json.JSONDecodeError, TypeError):
+            sections = []
+
+    brief = generate_research_brief_text(
+        case_type=case.case_type or "",
+        stage=case.stage or "",
+        client_name=case.client_name or "",
+        sections=sections,
+        findings=findings_payload,
+    )
+    if not brief:
+        return
+
+    if existing:
+        existing.content = brief
+        existing.is_private = False
+    else:
+        note = CaseNote(
+            case_id=case.id,
+            user_id=user_id,
+            title="Auto Research Brief",
+            content=brief,
+            note_type="research",
+            is_private=False,
+        )
+        db.add(note)
 
 
 @router.get("/{case_id}", response_model=List[AnalysisResultResponse])
@@ -98,7 +172,6 @@ async def run_analysis(
         created.append(ar)
 
     # Auto timeline event
-    from datetime import datetime, timezone
     event = TimelineEvent(
         case_id=case_id,
         event_type="analysis",
@@ -108,6 +181,17 @@ async def run_analysis(
         auto_generated=True,
     )
     db.add(event)
+
+    # Priority 5: generate a single auto-research note from saved findings.
+    try:
+        _upsert_auto_research_note(
+            db,
+            case=case,
+            user_id=current_user.id,
+            findings=created,
+        )
+    except Exception as exc:
+        logger.error("Auto research brief generation failed for case %s: %s", case_id, exc)
 
     db.commit()
     for ar in created:

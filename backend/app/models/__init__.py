@@ -4,6 +4,7 @@ from app.models.models import (
     TimelineEvent, Hearing, Task, CaseNote, Notification,
     Evidence, Deadline, DiscoveryRequest, TimeEntry, Expense,
     LegalResearch, Communication, AuditLog, JudgeProfile,
+    Client, ClientAccessLink, ClientDocumentRequest, ClientMessage,
 )
 
 __all__ = [
@@ -12,4 +13,5 @@ __all__ = [
     "TimelineEvent", "Hearing", "Task", "CaseNote", "Notification",
     "Evidence", "Deadline", "DiscoveryRequest", "TimeEntry", "Expense",
     "LegalResearch", "Communication", "AuditLog", "JudgeProfile",
+    "Client", "ClientAccessLink", "ClientDocumentRequest", "ClientMessage",
 ]

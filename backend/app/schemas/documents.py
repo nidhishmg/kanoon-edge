@@ -14,3 +14,5 @@ class DocumentResponse(BaseModel):
     isMandatory: bool = False
     hasText: bool = False
     chunkCount: int = 0
+    uploadedByClient: bool = False
+    documentRequestId: Optional[str] = None

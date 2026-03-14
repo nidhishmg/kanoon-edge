@@ -20,6 +20,7 @@ class Settings(BaseSettings):
 
     # File storage (local for dev, S3 for prod)
     UPLOAD_DIR: str = "uploads"
+    FRONTEND_BASE_URL: str = "http://localhost:3000"
 
     # Google Gemini
     GEMINI_API_KEY: str = ""

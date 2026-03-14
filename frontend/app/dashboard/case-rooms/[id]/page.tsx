@@ -1,15 +1,33 @@
 "use client";
 
+import { useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CaseRoomWorkspace } from "@/components/case-room/workspace";
+import { useCaseRoomStore } from "@/lib/store";
 
 export default function CaseRoomPage({
   params,
 }: {
   params: { id: string };
 }) {
+  const searchParams = useSearchParams();
+  const setActiveTab = useCaseRoomStore((s) => s.setActiveTab);
+  const setClientTabTargetSection = useCaseRoomStore((s) => s.setClientTabTargetSection);
+
+  useEffect(() => {
+    const tab = searchParams.get("tab");
+    if (tab === "client") {
+      setActiveTab("client");
+      const section = searchParams.get("section");
+      if (section === "profile" || section === "document-requests" || section === "messages") {
+        setClientTabTargetSection(section);
+      }
+    }
+  }, [searchParams, setActiveTab, setClientTabTargetSection]);
+
   const { data: caseRoom, isLoading } = useQuery({
     queryKey: ["case-room", params.id],
     queryFn: () => api.caseRooms.getById(params.id),

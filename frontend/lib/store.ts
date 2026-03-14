@@ -20,6 +20,10 @@ export const useAppStore = create<AppState>((set) => ({
 interface CaseRoomState {
   activeTab: string;
   setActiveTab: (tab: string) => void;
+  clientTabTargetSection: "profile" | "document-requests" | "messages" | null;
+  setClientTabTargetSection: (section: "profile" | "document-requests" | "messages" | null) => void;
+  prefilledMessage: string;
+  setPrefilledMessage: (msg: string) => void;
   documents: Document[];
   setDocuments: (docs: Document[]) => void;
   addDocument: (doc: Document) => void;
@@ -35,6 +39,10 @@ interface CaseRoomState {
 export const useCaseRoomStore = create<CaseRoomState>((set) => ({
   activeTab: "overview",
   setActiveTab: (tab) => set({ activeTab: tab }),
+  clientTabTargetSection: null,
+  setClientTabTargetSection: (section) => set({ clientTabTargetSection: section }),
+  prefilledMessage: "",
+  setPrefilledMessage: (msg) => set({ prefilledMessage: msg }),
   documents: [],
   setDocuments: (docs) => set({ documents: docs }),
   addDocument: (doc) =>

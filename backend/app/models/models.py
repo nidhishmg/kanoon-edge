@@ -65,6 +65,8 @@ class Case(Base):
     client_name = Column(String(255), nullable=True)
     client_phone = Column(String(20), nullable=True)
     client_email = Column(String(255), nullable=True)
+    client_id = Column(String(36), ForeignKey("clients.id"), nullable=True)
+    client_link_id = Column(String(36), ForeignKey("client_access_links.id"), nullable=True)
     opposing_counsel = Column(String(255), nullable=True)
 
     # Critical dates
@@ -110,6 +112,11 @@ class Case(Base):
     expenses = relationship("Expense", back_populates="case", cascade="all, delete-orphan")
     legal_research = relationship("LegalResearch", back_populates="case", cascade="all, delete-orphan")
     communications = relationship("Communication", back_populates="case", cascade="all, delete-orphan")
+    client_profile = relationship("Client", foreign_keys=[client_id])
+    active_client_link = relationship("ClientAccessLink", foreign_keys=[client_link_id])
+    client_access_links = relationship("ClientAccessLink", foreign_keys="ClientAccessLink.case_id", back_populates="case", cascade="all, delete-orphan")
+    client_document_requests = relationship("ClientDocumentRequest", back_populates="case", cascade="all, delete-orphan")
+    client_messages = relationship("ClientMessage", back_populates="case", cascade="all, delete-orphan")
 
     __table_args__ = (
         Index("ix_cases_user_id", "user_id"),
@@ -154,11 +161,14 @@ class Document(Base):
     file_path = Column(Text, nullable=True)
     text_content = Column(Text, nullable=True)               # Extracted full text
     status = Column(String(20), default="uploaded")
+    uploaded_by_client = Column(Boolean, default=False)
+    document_request_id = Column(String(36), ForeignKey("client_document_requests.id"), nullable=True)
     upload_date = Column(DateTime(timezone=True), default=utcnow)
     version = Column(Integer, default=1)
 
     case = relationship("Case", back_populates="documents")
     chunks = relationship("DocumentChunk", back_populates="document", cascade="all, delete-orphan")
+    client_document_request = relationship("ClientDocumentRequest", foreign_keys=[document_request_id])
 
     __table_args__ = (
         Index("ix_documents_case_id", "case_id"),
@@ -644,4 +654,136 @@ class JudgeProfile(Base):
 
     __table_args__ = (
         Index("ix_judge_profiles_user_id", "user_id"),
+    )
+
+
+# ── Clients ─────────────────────────────────────────────────
+
+class Client(Base):
+    __tablename__ = "clients"
+
+    id = Column(String(36), primary_key=True, default=new_uuid)
+    user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    full_name = Column(String(255), nullable=False)
+    date_of_birth = Column(String(20), nullable=True)
+    age = Column(Integer, nullable=True)
+    gender = Column(String(50), nullable=True)
+    fathers_name = Column(String(255), nullable=True)
+    occupation = Column(String(255), nullable=True)
+    employer_name = Column(String(255), nullable=True)
+    annual_income_range = Column(String(50), nullable=True)
+    marital_status = Column(String(50), nullable=True)
+    primary_phone = Column(String(20), nullable=False)
+    alternate_phone = Column(String(20), nullable=True)
+    email = Column(String(255), nullable=True)
+    permanent_address = Column(Text, nullable=True)
+    current_address = Column(Text, nullable=True)
+    aadhaar_last4 = Column(String(4), nullable=True)
+    pan_number = Column(String(20), nullable=True)
+    passport_number = Column(String(50), nullable=True)
+    passport_expiry = Column(String(20), nullable=True)
+    voter_id = Column(String(50), nullable=True)
+    has_passport = Column(Boolean, default=False)
+    emergency_contact_name = Column(String(255), nullable=True)
+    emergency_contact_relation = Column(String(100), nullable=True)
+    emergency_contact_phone = Column(String(20), nullable=True)
+    prior_cases = Column(Boolean, default=False)
+    prior_convictions = Column(Boolean, default=False)
+    currently_on_bail = Column(Boolean, default=False)
+    bail_conditions = Column(Text, nullable=True)
+    is_first_offender = Column(Boolean, nullable=True)
+    family_dependents_count = Column(Integer, nullable=True)
+    spouse_name = Column(String(255), nullable=True)
+    children_names = Column(Text, nullable=True)
+    payment_capacity = Column(String(20), nullable=True)
+    lawyer_notes = Column(Text, nullable=True)
+    client_since = Column(String(20), nullable=True)
+    profile_complete = Column(Boolean, default=False)
+    created_at = Column(DateTime(timezone=True), default=utcnow)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+    access_links = relationship("ClientAccessLink", back_populates="client")
+    document_requests = relationship("ClientDocumentRequest", back_populates="client")
+    messages = relationship("ClientMessage", back_populates="client")
+
+    __table_args__ = (
+        Index("ix_clients_user_id", "user_id"),
+        Index("ix_clients_primary_phone", "primary_phone"),
+    )
+
+
+class ClientAccessLink(Base):
+    __tablename__ = "client_access_links"
+
+    id = Column(String(36), primary_key=True, default=new_uuid)
+    case_id = Column(String(36), ForeignKey("cases.id", ondelete="CASCADE"), nullable=False)
+    client_id = Column(String(36), ForeignKey("clients.id"), nullable=True)
+    token = Column(String(255), unique=True, nullable=False, index=True)
+    created_by = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utcnow)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    is_active = Column(Boolean, default=True)
+    is_revoked = Column(Boolean, default=False)
+    pin_enabled = Column(Boolean, default=False)
+    pin_hash = Column(String(255), nullable=True)
+    open_count = Column(Integer, default=0)
+    last_opened_at = Column(DateTime(timezone=True), nullable=True)
+    show_hearing_date = Column(Boolean, default=True)
+    show_case_stage = Column(Boolean, default=True)
+    show_case_summary = Column(Boolean, default=False)
+    allow_document_upload = Column(Boolean, default=True)
+    allow_client_messages = Column(Boolean, default=True)
+    require_profile_completion = Column(Boolean, default=True)
+    profile_completed = Column(Boolean, default=False)
+    pin_failure_count = Column(Integer, default=0)
+    pin_locked_until = Column(DateTime(timezone=True), nullable=True)
+
+    case = relationship("Case", foreign_keys=[case_id], back_populates="client_access_links")
+    client = relationship("Client", back_populates="access_links")
+
+
+class ClientDocumentRequest(Base):
+    __tablename__ = "client_document_requests"
+
+    id = Column(String(36), primary_key=True, default=new_uuid)
+    case_id = Column(String(36), ForeignKey("cases.id", ondelete="CASCADE"), nullable=False)
+    client_id = Column(String(36), ForeignKey("clients.id"), nullable=True)
+    requested_by = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    document_name = Column(String(255), nullable=False)
+    reason = Column(String(1000), nullable=True)
+    due_date = Column(String(20), nullable=True)
+    status = Column(String(20), default="requested")
+    uploaded_document_id = Column(String(36), ForeignKey("documents.id"), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=utcnow)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+    case = relationship("Case", back_populates="client_document_requests")
+    client = relationship("Client", back_populates="document_requests")
+    uploaded_document = relationship("Document", foreign_keys=[uploaded_document_id])
+
+    __table_args__ = (
+        Index("ix_client_document_requests_case_id", "case_id"),
+    )
+
+
+class ClientMessage(Base):
+    __tablename__ = "client_messages"
+
+    id = Column(String(36), primary_key=True, default=new_uuid)
+    case_id = Column(String(36), ForeignKey("cases.id", ondelete="CASCADE"), nullable=False)
+    client_id = Column(String(36), ForeignKey("clients.id"), nullable=True)
+    sender_type = Column(String(20), nullable=False)
+    sender_id = Column(String(255), nullable=False)
+    content = Column(Text, nullable=False)
+    attachment_document_id = Column(String(36), ForeignKey("documents.id"), nullable=True)
+    is_read = Column(Boolean, default=False)
+    read_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=utcnow)
+
+    case = relationship("Case", back_populates="client_messages")
+    client = relationship("Client", back_populates="messages")
+
+    __table_args__ = (
+        Index("ix_client_messages_case_id", "case_id"),
+        Index("ix_client_messages_sender", "sender_type", "sender_id"),
     )

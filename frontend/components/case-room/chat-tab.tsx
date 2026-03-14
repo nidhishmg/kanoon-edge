@@ -25,7 +25,7 @@ export function ChatTab({ caseId }: ChatTabProps) {
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const { chatMessages, setChatMessages, addChatMessage } = useCaseRoomStore();
+  const { chatMessages, setChatMessages, addChatMessage, prefilledMessage, setPrefilledMessage } = useCaseRoomStore();
 
   const { data: suggestedQuestions } = useQuery({
     queryKey: ["suggested-questions", caseId],
@@ -45,6 +45,13 @@ export function ChatTab({ caseId }: ChatTabProps) {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatMessages]);
 
+  useEffect(() => {
+    if (prefilledMessage) {
+      setInput(prefilledMessage);
+      setPrefilledMessage("");
+    }
+  }, [prefilledMessage, setPrefilledMessage]);
+
   const handleSend = async (message?: string) => {
     const text = message || input;
     if (!text.trim()) return;
@@ -59,9 +66,19 @@ export function ChatTab({ caseId }: ChatTabProps) {
     setInput("");
     setSending(true);
 
-    const response = await api.chat.sendMessage(caseId, text);
-    addChatMessage(response);
-    setSending(false);
+    try {
+      const response = await api.chat.sendMessage(caseId, text);
+      addChatMessage(response);
+    } catch {
+      addChatMessage({
+        id: `cm-error-${Date.now()}`,
+        role: "assistant",
+        content: "Sorry, something went wrong. Please try again.",
+        timestamp: new Date().toISOString(),
+      });
+    } finally {
+      setSending(false);
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {

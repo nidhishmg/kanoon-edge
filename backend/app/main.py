@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import inspect, text
 
 from app.database import engine, SessionLocal, Base
 from app.routers import (
@@ -23,6 +24,8 @@ from app.routers import (
     research_router,
     communications_router,
     judge_router,
+    client_router,
+    client_public_router,
 )
 from app.utils.seed import seed_dev_user
 
@@ -30,10 +33,45 @@ from app.utils.seed import seed_dev_user
 import app.models  # noqa: F401
 
 
+def _ensure_legacy_columns():
+    """Backfill new columns on existing deployments without Alembic migrations."""
+    inspector = inspect(engine)
+
+    def has_col(table_name: str, col_name: str) -> bool:
+        try:
+            cols = inspector.get_columns(table_name)
+        except Exception:
+            return False
+        return any(c.get("name") == col_name for c in cols)
+
+    statements: list[str] = []
+
+    if not has_col("cases", "client_id"):
+        statements.append("ALTER TABLE cases ADD COLUMN client_id VARCHAR(36)")
+    if not has_col("cases", "client_link_id"):
+        statements.append("ALTER TABLE cases ADD COLUMN client_link_id VARCHAR(36)")
+    if not has_col("documents", "uploaded_by_client"):
+        statements.append("ALTER TABLE documents ADD COLUMN uploaded_by_client BOOLEAN DEFAULT 0")
+    if not has_col("documents", "document_request_id"):
+        statements.append("ALTER TABLE documents ADD COLUMN document_request_id VARCHAR(36)")
+
+    if not statements:
+        return
+
+    with engine.begin() as conn:
+        for stmt in statements:
+            try:
+                conn.execute(text(stmt))
+            except Exception:
+                # Safe best-effort migration for local/dev runtime bootstrap.
+                pass
+
+
 @asynccontextmanager
 async def lifespan(application: FastAPI):
     # Startup: create tables and seed dev user
     Base.metadata.create_all(bind=engine)
+    _ensure_legacy_columns()
     db = SessionLocal()
     try:
         seed_dev_user(db)
@@ -76,6 +114,8 @@ app.include_router(billing_router.router, prefix="/api/billing", tags=["Billing"
 app.include_router(research_router.router, prefix="/api/research", tags=["Research"])
 app.include_router(communications_router.router, prefix="/api/communications", tags=["Communications"])
 app.include_router(judge_router.router, prefix="/api/judges", tags=["Judges"])
+app.include_router(client_router.router, prefix="/api", tags=["Clients"])
+app.include_router(client_public_router.router, prefix="/api", tags=["Client Public"])
 
 
 @app.get("/")

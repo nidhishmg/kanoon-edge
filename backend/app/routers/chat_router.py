@@ -107,7 +107,10 @@ def _build_case_context(case: Case, db: Session) -> str:
     # Hearings
     hearings = db.query(Hearing).filter(Hearing.case_id == case.id).order_by(Hearing.hearing_date.desc()).limit(5).all()
     if hearings:
-        h_strs = [f"{h.hearing_date}: {h.purpose or 'Hearing'} - {h.outcome or 'Pending'}" for h in hearings]
+        h_strs = [
+            f"{h.hearing_date}: {h.hearing_type or 'Hearing'} - {(h.outcome or h.notes or 'Pending')}"
+            for h in hearings
+        ]
         parts.append("Recent Hearings: " + "; ".join(h_strs))
 
     # Tasks
@@ -244,7 +247,10 @@ async def send_message(
     document_chunks = []
 
     # First chunk: full case context (structured data)
-    case_context = _build_case_context(case, db)
+    try:
+        case_context = _build_case_context(case, db)
+    except Exception:
+        case_context = f"Case: {case.title or ''}\nType: {case.case_type or ''}\nStage: {case.stage or ''}"
     document_chunks.append(f"[Case Data]\n{case_context}")
 
     for doc in docs:

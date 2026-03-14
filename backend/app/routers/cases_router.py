@@ -1,15 +1,23 @@
 import json
+from datetime import date, timedelta, datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
 
 from app.database import get_db
-from app.models import User, Case, Party, TimelineEvent, AnalysisResult
+from app.models import User, Case, Party, TimelineEvent, AnalysisResult, Hearing, Task, Deadline, Client
 from app.schemas.cases import CaseCreate, CaseRoomResponse, PartyCreate, PartyResponse
 from app.utils.auth import get_current_user
 from app.utils.strength import calculate_strength, calculate_dates, generate_recommendations, detect_rule_based_loopholes
 from app.utils.sections_db import classify_sections
+from app.utils.task_templates import (
+    parse_flexible_date,
+    to_iso,
+    resolve_templates,
+    resolve_due_date,
+    compute_charge_sheet_deadline,
+)
 
 router = APIRouter()
 
@@ -48,6 +56,23 @@ def _case_to_response(case: Case) -> CaseRoomResponse:
             dismissed = json.loads(case.dismissed_recommendations)
         except (json.JSONDecodeError, TypeError):
             dismissed = []
+
+    client_snapshot = None
+    if case.client_profile:
+        unread_client_messages = len([
+            m for m in (case.client_messages or []) if m.sender_type == "client" and not m.is_read
+        ])
+        active_document_requests = len([
+            r for r in (case.client_document_requests or []) if r.status in ("requested", "uploaded")
+        ])
+        client_snapshot = {
+            "id": case.client_profile.id,
+            "name": case.client_profile.full_name,
+            "phone": case.client_profile.primary_phone,
+            "profileComplete": bool(case.client_profile.profile_complete),
+            "unreadMessageCount": unread_client_messages,
+            "activeDocumentRequestCount": active_document_requests,
+        }
 
     return CaseRoomResponse(
         id=case.id,
@@ -100,7 +125,186 @@ def _case_to_response(case: Case) -> CaseRoomResponse:
         daysToNextHearing=dates.get("daysToNextHearing"),
         recommendations=recommendations,
         dismissedRecommendations=dismissed,
+        client=client_snapshot,
     )
+
+
+def _ensure_initial_hearing(case: Case, db: Session):
+    if not case.next_hearing:
+        return
+    exists = db.query(Hearing).filter(
+        Hearing.case_id == case.id,
+        Hearing.hearing_date == case.next_hearing,
+    ).first()
+    if exists:
+        return
+    db.add(Hearing(
+        case_id=case.id,
+        hearing_date=case.next_hearing,
+        hearing_type=case.hearing_purpose or "Upcoming Hearing",
+        judge_name=case.judge_name,
+        court_number=case.court_number,
+        notes=f"Auto-created from case intake ({case.court or 'Court'})",
+    ))
+
+
+def _upsert_deadline(
+    *,
+    case: Case,
+    db: Session,
+    user_id: str,
+    title: str,
+    deadline_type: str,
+    due_date: str | None,
+    description: str,
+    legal_basis: str | None = None,
+):
+    if not due_date:
+        return
+    existing = db.query(Deadline).filter(
+        Deadline.case_id == case.id,
+        Deadline.deadline_type == deadline_type,
+        Deadline.title == title,
+    ).first()
+    if existing:
+        existing.due_date = due_date
+        existing.description = description
+        existing.court_rule = legal_basis
+        return
+    db.add(Deadline(
+        case_id=case.id,
+        user_id=user_id,
+        title=title,
+        description=description,
+        deadline_type=deadline_type,
+        due_date=due_date,
+        priority="high",
+        court_rule=legal_basis,
+        status="pending",
+    ))
+
+
+def _ensure_statutory_deadlines(case: Case, db: Session, user_id: str):
+    charge_sheet_deadline = compute_charge_sheet_deadline(case)
+    charge_sheet_deadline_str = to_iso(charge_sheet_deadline)
+
+    if charge_sheet_deadline_str:
+        _upsert_deadline(
+            case=case,
+            db=db,
+            user_id=user_id,
+            title="Charge Sheet Filing Deadline",
+            deadline_type="statutory",
+            due_date=charge_sheet_deadline_str,
+            description="Computed from arrest date and applicable section gravity.",
+            legal_basis="Section 167(2) CrPC",
+        )
+        _upsert_deadline(
+            case=case,
+            db=db,
+            user_id=user_id,
+            title="Default Bail Application Window Opens",
+            deadline_type="statutory",
+            due_date=charge_sheet_deadline_str,
+            description="Default bail eligibility window based on statutory charge sheet timeline.",
+            legal_basis="Section 167(2) CrPC",
+        )
+
+    is_civil = (case.case_type or "").strip().lower() == "civil"
+    filing_date = parse_flexible_date(case.filing_date)
+    if is_civil and filing_date:
+        _upsert_deadline(
+            case=case,
+            db=db,
+            user_id=user_id,
+            title="Written Statement Deadline",
+            deadline_type="statutory",
+            due_date=to_iso(filing_date + timedelta(days=30)),
+            description="Estimated written statement deadline from filing date.",
+            legal_basis="CPC written statement timeline",
+        )
+
+    no_41a = (case.checklist_41a_notice or "").strip().lower() == "no"
+    no_arrest = parse_flexible_date(case.arrest_date) is None
+    if no_41a and no_arrest:
+        _upsert_deadline(
+            case=case,
+            db=db,
+            user_id=user_id,
+            title="41A Non-Compliance Challenge Prep",
+            deadline_type="statutory",
+            due_date=to_iso(date.today() + timedelta(days=3)),
+            description="Prepare anticipatory bail challenge for 41A notice non-compliance.",
+            legal_basis="Section 41A CrPC",
+        )
+
+
+def _ensure_template_tasks(case: Case, db: Session, user_id: str):
+    templates = resolve_templates(case.case_type, case.stage)
+    today = date.today()
+    existing_titles = {t.title for t in db.query(Task).filter(Task.case_id == case.id).all()}
+
+    for tpl in templates:
+        title = tpl["title"]
+        if title in existing_titles:
+            continue
+        due = resolve_due_date(tpl["due_date_rule"], case, today)
+        if due and due < today:
+            continue
+        db.add(Task(
+            case_id=case.id,
+            user_id=user_id,
+            title=title,
+            description=tpl.get("description") or "",
+            due_date=to_iso(due),
+            priority=tpl.get("priority") or "medium",
+            status="todo",
+            task_type=tpl.get("task_type") or "general",
+        ))
+        existing_titles.add(title)
+
+
+def _ensure_hearing_proximity_tasks(case: Case, db: Session, user_id: str) -> bool:
+    next_hearing = parse_flexible_date(case.next_hearing)
+    if not next_hearing:
+        return False
+    days_to_hearing = (next_hearing - date.today()).days
+    if days_to_hearing < 0 or days_to_hearing > 7:
+        return False
+
+    pending_count = db.query(Task).filter(
+        Task.case_id == case.id,
+        Task.status.in_(["todo", "in_progress", "pending"]),
+    ).count()
+    if pending_count >= 3:
+        return False
+
+    created = False
+    existing_titles = {t.title for t in db.query(Task).filter(Task.case_id == case.id).all()}
+    prep_tasks = [
+        ("Finalize hearing brief", "Prepare concise written and oral submissions.", 2),
+        ("Compile hearing bundle", "Arrange annexures, citations, and chronology.", 1),
+        ("Review opposing arguments", "Prepare rebuttal points for anticipated objections.", 0),
+    ]
+    for title, desc, days_before in prep_tasks:
+        if title in existing_titles:
+            continue
+        due = next_hearing - timedelta(days=days_before)
+        if due < date.today():
+            due = date.today()
+        db.add(Task(
+            case_id=case.id,
+            user_id=user_id,
+            title=title,
+            description=desc,
+            due_date=to_iso(due),
+            priority="high",
+            status="todo",
+            task_type="hearing_prep",
+        ))
+        created = True
+        existing_titles.add(title)
+    return created
 
 
 @router.get("/", response_model=List[CaseRoomResponse])
@@ -121,6 +325,11 @@ async def get_case(
     case = db.query(Case).filter(Case.id == case_id, Case.user_id == current_user.id).first()
     if not case:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Case not found")
+
+    if _ensure_hearing_proximity_tasks(case, db, current_user.id):
+        db.commit()
+        db.refresh(case)
+
     return _case_to_response(case)
 
 
@@ -130,6 +339,32 @@ async def create_case(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    selected_client = None
+    if data.client_id:
+        selected_client = db.query(Client).filter(
+            Client.id == data.client_id,
+            Client.user_id == current_user.id,
+        ).first()
+        if not selected_client:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Selected client not found")
+
+    if not selected_client and data.client_data:
+        full_name = (data.client_data.get("full_name") or data.client_data.get("name") or "").strip()
+        primary_phone = (data.client_data.get("primary_phone") or data.client_data.get("phone") or "").strip()
+        if not full_name or not primary_phone:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="client_data requires full_name and primary_phone")
+        selected_client = Client(
+            user_id=current_user.id,
+            full_name=full_name,
+            primary_phone=primary_phone,
+            date_of_birth=data.client_data.get("date_of_birth") or data.client_data.get("dob"),
+            occupation=data.client_data.get("occupation"),
+            client_since=datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+            profile_complete=False,
+        )
+        db.add(selected_client)
+        db.flush()
+
     sections_json = json.dumps(data.applicable_sections) if data.applicable_sections else None
     case = Case(
         user_id=current_user.id,
@@ -149,9 +384,10 @@ async def create_case(
         applicable_sections=sections_json,
         case_description=data.case_description,
         priority=data.priority or "medium",
-        client_name=data.client_name,
-        client_phone=data.client_phone,
-        client_email=data.client_email,
+        client_name=(selected_client.full_name if selected_client else data.client_name),
+        client_phone=(selected_client.primary_phone if selected_client else data.client_phone),
+        client_email=(selected_client.email if selected_client else data.client_email),
+        client_id=(selected_client.id if selected_client else None),
         opposing_counsel=data.opposing_counsel,
         incident_date=data.incident_date,
         fir_date=data.fir_date,
@@ -171,6 +407,23 @@ async def create_case(
     db.add(case)
     db.flush()
 
+    auto_client_party_added = False
+    if selected_client and selected_client.full_name:
+        existing_client_party = any(
+            (p.name or "").strip().lower() == selected_client.full_name.strip().lower()
+            for p in (data.parties or [])
+        )
+        if not existing_client_party:
+            role_by_side = {
+                "defence": "Accused",
+                "prosecution": "Complainant",
+                "petitioner": "Petitioner",
+                "respondent": "Respondent",
+            }
+            auto_role = role_by_side.get((data.lawyer_side or "").strip().lower(), "Petitioner")
+            db.add(Party(case_id=case.id, name=selected_client.full_name, role=auto_role, notes="Auto-linked client"))
+            auto_client_party_added = True
+
     for p in data.parties:
         party = Party(
             case_id=case.id, name=p.name, role=p.role, notes=p.notes,
@@ -182,7 +435,6 @@ async def create_case(
         db.add(party)
 
     # Auto-generate timeline events from all dates
-    from datetime import datetime, timezone
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     te = TimelineEvent(
         case_id=case.id, event_type="filing", title="Case Room Created",
@@ -239,6 +491,15 @@ async def create_case(
             guidance=lp.get("guidance", ""),
             source="intake",
         ))
+
+    # Priority 1: Auto-generate first hearing from wizard data
+    _ensure_initial_hearing(case, db)
+
+    # Priority 2: Auto-generate statutory deadlines from intake dates/checklist
+    _ensure_statutory_deadlines(case, db, current_user.id)
+
+    # Priority 3: Auto-generate task templates by case type + stage
+    _ensure_template_tasks(case, db, current_user.id)
 
     db.commit()
     db.refresh(case)

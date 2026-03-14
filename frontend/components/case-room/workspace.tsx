@@ -1,6 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
+import { useQuery } from "@tanstack/react-query";
 import {
   Share2,
   Download,
@@ -22,6 +23,7 @@ import {
   Search,
   BookOpen,
   DollarSign,
+  Users,
 } from "lucide-react";
 import { CaseRoom } from "@/types";
 import { Button } from "@/components/ui/button";
@@ -29,6 +31,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { formatDate, getStrengthColor } from "@/lib/utils";
 import { useCaseRoomStore } from "@/lib/store";
+import { api } from "@/lib/api";
 import { OverviewTab } from "@/components/case-room/overview-tab";
 import { DocumentsTab } from "@/components/case-room/documents-tab";
 import { AnalysisTab } from "@/components/case-room/analysis-tab";
@@ -43,6 +46,7 @@ import { DeadlinesTab } from "@/components/case-room/deadlines-tab";
 import { DiscoveryTab } from "@/components/case-room/discovery-tab";
 import { ResearchTab } from "@/components/case-room/research-tab";
 import { FinancialsTab } from "@/components/case-room/financials-tab";
+import { ClientTab } from "@/components/case-room/client-tab";
 
 interface WorkspaceProps {
   caseRoom: CaseRoom;
@@ -52,7 +56,6 @@ const tabItems = [
   { value: "overview", label: "Overview", icon: LayoutDashboard },
   { value: "documents", label: "Documents", icon: FileText },
   { value: "evidence", label: "Evidence", icon: Shield },
-  { value: "timeline", label: "Timeline", icon: Clock },
   { value: "hearings", label: "Hearings", icon: Gavel },
   { value: "deadlines", label: "Deadlines", icon: CalendarClock },
   { value: "tasks", label: "Tasks", icon: CheckSquare },
@@ -63,10 +66,17 @@ const tabItems = [
   { value: "analysis", label: "Analysis", icon: Brain },
   { value: "draft", label: "Draft", icon: FileEdit },
   { value: "chat", label: "Chat", icon: MessageSquare },
+  { value: "client", label: "Client", icon: Users },
+  { value: "timeline", label: "Timeline", icon: Clock },
 ];
 
 export function CaseRoomWorkspace({ caseRoom }: WorkspaceProps) {
   const { activeTab, setActiveTab } = useCaseRoomStore();
+  const { data: clientUnread = 0 } = useQuery({
+    queryKey: ["client-unread", caseRoom.id],
+    queryFn: () => api.client.unreadCount(caseRoom.id),
+    refetchInterval: 60000,
+  });
   const strengthVariant =
     caseRoom.strength >= 75 ? "success" : caseRoom.strength >= 50 ? "warning" : "destructive";
 
@@ -130,6 +140,11 @@ export function CaseRoomWorkspace({ caseRoom }: WorkspaceProps) {
               <TabsTrigger key={tab.value} value={tab.value} className="gap-2">
                 <Icon className="w-4 h-4" />
                 <span className="hidden sm:inline">{tab.label}</span>
+                {tab.value === "client" && clientUnread > 0 ? (
+                  <Badge variant="destructive" className="ml-1 px-1.5 py-0 text-[10px]">
+                    {clientUnread}
+                  </Badge>
+                ) : null}
               </TabsTrigger>
             );
           })}
@@ -143,9 +158,6 @@ export function CaseRoomWorkspace({ caseRoom }: WorkspaceProps) {
         </TabsContent>
         <TabsContent value="evidence">
           <EvidenceTab caseId={caseRoom.id} />
-        </TabsContent>
-        <TabsContent value="timeline">
-          <TimelineTab caseId={caseRoom.id} />
         </TabsContent>
         <TabsContent value="hearings">
           <HearingsTab caseId={caseRoom.id} />
@@ -176,6 +188,12 @@ export function CaseRoomWorkspace({ caseRoom }: WorkspaceProps) {
         </TabsContent>
         <TabsContent value="chat">
           <ChatTab caseId={caseRoom.id} />
+        </TabsContent>
+        <TabsContent value="client">
+          <ClientTab caseRoom={caseRoom} />
+        </TabsContent>
+        <TabsContent value="timeline">
+          <TimelineTab caseId={caseRoom.id} />
         </TabsContent>
       </Tabs>
     </div>

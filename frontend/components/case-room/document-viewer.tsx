@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { useCaseRoomStore } from "@/lib/store";
 
 interface DocumentViewerProps {
   document: Document;
@@ -22,39 +23,16 @@ interface DocumentViewerProps {
 }
 
 export function DocumentViewer({ document, onClose }: DocumentViewerProps) {
-  // Mock extracted insights
-  const insights = [
-    {
-      type: "fact",
-      text: "FIR filed on 15 October 2024 at PS Saket, New Delhi",
-      page: 1,
-    },
-    {
-      type: "evidence",
-      text: "Witness identified accused at 8:45 PM — conflicts with FIR timing of 10:30 PM",
-      page: 3,
-    },
-    {
-      type: "fact",
-      text: "Investigating officer: SI Ramesh Kumar, Badge No. 4521",
-      page: 1,
-    },
-    {
-      type: "evidence",
-      text: "No independent witness signature found on FIR — potential procedural violation",
-      page: 3,
-    },
-    {
-      type: "fact",
-      text: "Sections invoked: 302, 120B IPC",
-      page: 2,
-    },
-    {
-      type: "evidence",
-      text: "Medical report describes injuries as 'consistent with lateral impact on rough surface' — supports fall theory",
-      page: 7,
-    },
-  ];
+  const { analysisResults } = useCaseRoomStore();
+
+  // Filter analysis results that reference this document
+  const insights = analysisResults
+    .filter((r) => r.documentRef === document.name)
+    .map((r) => ({
+      type: r.type === "loophole" || r.type === "contradiction" ? "evidence" as const : "fact" as const,
+      text: r.title + (r.description ? ` — ${r.description}` : ""),
+      page: r.page,
+    }));
 
   return (
     <motion.div
@@ -117,7 +95,15 @@ export function DocumentViewer({ document, onClose }: DocumentViewerProps) {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              {insights.map((insight, i) => (
+              {insights.length === 0 ? (
+                <div className="py-8 text-center">
+                  <Sparkles className="w-10 h-10 text-border mx-auto mb-3" />
+                  <p className="text-sm text-muted-foreground">
+                    No insights extracted yet. Run analysis to scan this document.
+                  </p>
+                </div>
+              ) : (
+                insights.map((insight, i) => (
                 <div key={i}>
                   <div className="flex items-start gap-3 p-3 rounded-lg bg-secondary/50 border border-border">
                     <div className="shrink-0 mt-0.5">
@@ -148,7 +134,8 @@ export function DocumentViewer({ document, onClose }: DocumentViewerProps) {
                   </div>
                   {i < insights.length - 1 && <Separator className="mt-4" />}
                 </div>
-              ))}
+              ))
+              )}
             </CardContent>
           </Card>
         </div>

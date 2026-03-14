@@ -6,14 +6,14 @@ from app.utils.auth import hash_password
 
 def seed_dev_user(db: Session):
     """Create the default development user if it doesn't exist."""
-    existing = db.query(User).filter(User.email == "user123").first()
+    existing = db.query(User).filter(User.email == "nidish@kanoonedge.in").first()
     if existing:
         return existing
 
     dev_user = User(
-        name="Advocate Rahul",
-        email="user123",
-        password_hash=hash_password("123"),
+        name="Nidish MG",
+        email="nidish@kanoonedge.in",
+        password_hash=hash_password("K@noonEdge#2026!"),
         role="lawyer",
         plan="pro",
     )

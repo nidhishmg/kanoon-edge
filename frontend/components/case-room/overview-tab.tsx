@@ -18,7 +18,7 @@ import {
   Search,
 } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
-import { CaseRoom, TimelineEvent, Recommendation } from "@/types";
+import { CaseRoom, TimelineEvent } from "@/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -70,10 +70,8 @@ export function OverviewTab({ caseRoom }: OverviewTabProps) {
   const daysToHearing = caseRoom.daysToNextHearing;
   const hearingUrgency =
     daysToHearing !== undefined && daysToHearing !== null
-      ? daysToHearing <= 1
+      ? daysToHearing <= 3
         ? "destructive"
-        : daysToHearing <= 3
-        ? "warning"
         : "secondary"
       : "secondary";
 

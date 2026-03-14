@@ -22,6 +22,8 @@ class CaseCreate(BaseModel):
     client_name: Optional[str] = None
     client_phone: Optional[str] = None
     client_email: Optional[str] = None
+    client_id: Optional[str] = None
+    client_data: Optional[dict] = None
     opposing_counsel: Optional[str] = None
     # Critical dates
     incident_date: Optional[str] = None
@@ -126,3 +128,4 @@ class CaseRoomResponse(BaseModel):
     # Recommendations
     recommendations: List[dict] = []
     dismissedRecommendations: List[str] = []
+    client: Optional[dict] = None

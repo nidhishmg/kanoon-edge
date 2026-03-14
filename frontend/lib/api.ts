@@ -21,6 +21,12 @@ import {
   Communication,
   JudgeProfile,
   SectionClassification,
+  ClientRecord,
+  ClientListItem,
+  ClientAccessLink,
+  ClientDocumentRequestItem,
+  ClientCaseMessage,
+  PublicClientCaseSummary,
 } from "@/types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
@@ -119,6 +125,14 @@ interface BackendCaseRoom {
   daysToNextHearing?: number;
   recommendations?: { id: string; action: string; reason: string; button?: string; tab?: string }[];
   dismissedRecommendations?: string[];
+  client?: {
+    id: string;
+    name: string;
+    phone: string;
+    profileComplete: boolean;
+    unreadMessageCount: number;
+    activeDocumentRequestCount: number;
+  };
 }
 
 function toCaseRoom(c: BackendCaseRoom): CaseRoom {
@@ -173,6 +187,7 @@ function toCaseRoom(c: BackendCaseRoom): CaseRoom {
     daysToNextHearing: c.daysToNextHearing,
     recommendations: c.recommendations,
     dismissedRecommendations: c.dismissedRecommendations,
+    client: c.client,
   };
 }
 
@@ -184,6 +199,8 @@ interface BackendDocument {
   uploadDate: string;
   status: string;
   pages: number;
+  uploadedByClient?: boolean;
+  documentRequestId?: string;
 }
 
 function toDocument(d: BackendDocument): Document {
@@ -195,6 +212,8 @@ function toDocument(d: BackendDocument): Document {
     uploadDate: d.uploadDate,
     status: d.status as Document["status"],
     pages: d.pages,
+    uploadedByClient: d.uploadedByClient,
+    documentRequestId: d.documentRequestId,
   };
 }
 
@@ -324,6 +343,8 @@ export const api = {
       client_name?: string;
       client_phone?: string;
       client_email?: string;
+      client_id?: string;
+      client_data?: Record<string, unknown>;
       opposing_counsel?: string;
       incident_date?: string;
       fir_date?: string;
@@ -681,6 +702,138 @@ export const api = {
     },
     delete: async (judgeId: string): Promise<void> => {
       await apiFetch(`/judges/${judgeId}`, { method: "DELETE" });
+    },
+  },
+
+  client: {
+    create: async (payload: Record<string, unknown>): Promise<ClientRecord> => {
+      return apiFetch<ClientRecord>("/clients/", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+    },
+    update: async (clientId: string, payload: Record<string, unknown>): Promise<ClientRecord> => {
+      return apiFetch<ClientRecord>(`/clients/${clientId}`, {
+        method: "PUT",
+        body: JSON.stringify(payload),
+      });
+    },
+    list: async (search?: string): Promise<ClientListItem[]> => {
+      const q = search ? `?search=${encodeURIComponent(search)}` : "";
+      return apiFetch<ClientListItem[]>(`/clients/${q}`);
+    },
+    linkToCase: async (caseId: string, clientId: string): Promise<{ case_id: string; client_id: string }> => {
+      return apiFetch<{ case_id: string; client_id: string }>(`/cases/${caseId}/link-client`, {
+        method: "POST",
+        body: JSON.stringify({ client_id: clientId }),
+      });
+    },
+    getActiveLink: async (caseId: string): Promise<ClientAccessLink | null> => {
+      return apiFetch<ClientAccessLink | null>(`/cases/${caseId}/client-link`);
+    },
+    generateLink: async (caseId: string, payload: Record<string, unknown>): Promise<ClientAccessLink> => {
+      return apiFetch<ClientAccessLink>(`/cases/${caseId}/client-link`, {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+    },
+    updateLink: async (caseId: string, payload: Record<string, unknown>): Promise<ClientAccessLink> => {
+      return apiFetch<ClientAccessLink>(`/cases/${caseId}/client-link`, {
+        method: "PUT",
+        body: JSON.stringify(payload),
+      });
+    },
+    revokeLink: async (caseId: string): Promise<{ message: string }> => {
+      return apiFetch<{ message: string }>(`/cases/${caseId}/client-link`, {
+        method: "DELETE",
+      });
+    },
+    regenerateLink: async (caseId: string, payload: Record<string, unknown>): Promise<ClientAccessLink> => {
+      return apiFetch<ClientAccessLink>(`/cases/${caseId}/client-link/regenerate`, {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+    },
+    listDocumentRequests: async (caseId: string): Promise<ClientDocumentRequestItem[]> => {
+      return apiFetch<ClientDocumentRequestItem[]>(`/cases/${caseId}/document-requests`);
+    },
+    createDocumentRequest: async (caseId: string, payload: Record<string, unknown>): Promise<ClientDocumentRequestItem> => {
+      return apiFetch<ClientDocumentRequestItem>(`/cases/${caseId}/document-requests`, {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+    },
+    updateDocumentRequest: async (requestId: string, payload: Record<string, unknown>): Promise<ClientDocumentRequestItem> => {
+      return apiFetch<ClientDocumentRequestItem>(`/document-requests/${requestId}`, {
+        method: "PUT",
+        body: JSON.stringify(payload),
+      });
+    },
+    listMessages: async (caseId: string): Promise<ClientCaseMessage[]> => {
+      return apiFetch<ClientCaseMessage[]>(`/cases/${caseId}/messages`);
+    },
+    sendMessage: async (caseId: string, payload: { content: string; attachment_document_id?: string }): Promise<ClientCaseMessage> => {
+      return apiFetch<ClientCaseMessage>(`/cases/${caseId}/messages`, {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+    },
+    unreadCount: async (caseId: string): Promise<number> => {
+      const data = await apiFetch<{ count: number }>(`/cases/${caseId}/messages/unread-count`);
+      return data.count;
+    },
+  },
+
+  clientPublic: {
+    getCaseSummary: async (token: string, sessionToken?: string): Promise<PublicClientCaseSummary> => {
+      const headers: Record<string, string> = {};
+      if (sessionToken) headers["x-client-session-token"] = sessionToken;
+      return apiFetch<PublicClientCaseSummary>(`/client/${token}/case`, { headers });
+    },
+    verifyPin: async (token: string, pin: string): Promise<{ session_token: string; expires_in_seconds: number }> => {
+      return apiFetch<{ session_token: string; expires_in_seconds: number }>(`/client/${token}/verify-pin`, {
+        method: "POST",
+        body: JSON.stringify({ pin }),
+      });
+    },
+    submitProfile: async (token: string, payload: Record<string, unknown>, sessionToken?: string): Promise<{ message: string }> => {
+      const headers: Record<string, string> = {};
+      if (sessionToken) headers["x-client-session-token"] = sessionToken;
+      return apiFetch<{ message: string }>(`/client/${token}/profile`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(payload),
+      });
+    },
+    listDocumentRequests: async (token: string, sessionToken?: string): Promise<ClientDocumentRequestItem[]> => {
+      const headers: Record<string, string> = {};
+      if (sessionToken) headers["x-client-session-token"] = sessionToken;
+      return apiFetch<ClientDocumentRequestItem[]>(`/client/${token}/documents`, { headers });
+    },
+    uploadDocument: async (token: string, requestId: string, file: File, sessionToken?: string): Promise<{ message: string; document_id: string }> => {
+      const formData = new FormData();
+      formData.append("file", file);
+      const headers: Record<string, string> = {};
+      if (sessionToken) headers["x-client-session-token"] = sessionToken;
+      return apiFetch<{ message: string; document_id: string }>(`/client/${token}/documents/${requestId}/upload`, {
+        method: "POST",
+        headers,
+        body: formData,
+      });
+    },
+    listMessages: async (token: string, sessionToken?: string): Promise<ClientCaseMessage[]> => {
+      const headers: Record<string, string> = {};
+      if (sessionToken) headers["x-client-session-token"] = sessionToken;
+      return apiFetch<ClientCaseMessage[]>(`/client/${token}/messages`, { headers });
+    },
+    sendMessage: async (token: string, content: string, sessionToken?: string): Promise<ClientCaseMessage> => {
+      const headers: Record<string, string> = {};
+      if (sessionToken) headers["x-client-session-token"] = sessionToken;
+      return apiFetch<ClientCaseMessage>(`/client/${token}/messages`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ content }),
+      });
     },
   },
 };
