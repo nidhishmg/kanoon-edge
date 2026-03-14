@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
+import { useCaseRoomStore } from "@/lib/store";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,6 +23,7 @@ interface HearingsTabProps {
 }
 
 export function HearingsTab({ caseId }: HearingsTabProps) {
+  const { setActiveTab } = useCaseRoomStore();
   const queryClient = useQueryClient();
   const [showForm, setShowForm] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -143,10 +145,17 @@ export function HearingsTab({ caseId }: HearingsTabProps) {
 
       {hearings.length === 0 ? (
         <Card>
-          <CardContent className="py-12 text-center text-muted-foreground">
+          <CardContent className="py-12 text-center text-muted-foreground space-y-3">
             <Gavel className="w-8 h-8 mx-auto mb-3 opacity-50" />
             <p>No hearings recorded yet.</p>
-            <p className="text-xs mt-1">Add hearing records to maintain a complete case history.</p>
+            <p className="text-xs mt-1">Add your first hearing and connect resulting dates to deadlines.</p>
+            <div className="flex items-center justify-center gap-2">
+              <Button size="sm" onClick={() => setShowForm(true)}>
+                <Plus className="w-4 h-4 mr-2" />
+                Add Hearing
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => setActiveTab("deadlines")}>Open Deadlines</Button>
+            </div>
           </CardContent>
         </Card>
       ) : (

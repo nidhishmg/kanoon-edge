@@ -47,6 +47,7 @@ import { DiscoveryTab } from "@/components/case-room/discovery-tab";
 import { ResearchTab } from "@/components/case-room/research-tab";
 import { FinancialsTab } from "@/components/case-room/financials-tab";
 import { ClientTab } from "@/components/case-room/client-tab";
+import { ErrorBoundary } from "@/components/ui/error-boundary";
 
 interface WorkspaceProps {
   caseRoom: CaseRoom;
@@ -151,49 +152,79 @@ export function CaseRoomWorkspace({ caseRoom }: WorkspaceProps) {
         </TabsList>
 
         <TabsContent value="overview">
-          <OverviewTab caseRoom={caseRoom} />
+          <ErrorBoundary>
+            <OverviewTab caseRoom={caseRoom} />
+          </ErrorBoundary>
         </TabsContent>
         <TabsContent value="documents">
-          <DocumentsTab caseId={caseRoom.id} />
+          <ErrorBoundary>
+            <DocumentsTab caseId={caseRoom.id} caseType={caseRoom.caseType} />
+          </ErrorBoundary>
         </TabsContent>
         <TabsContent value="evidence">
-          <EvidenceTab caseId={caseRoom.id} />
+          <ErrorBoundary>
+            <EvidenceTab caseId={caseRoom.id} />
+          </ErrorBoundary>
         </TabsContent>
         <TabsContent value="hearings">
-          <HearingsTab caseId={caseRoom.id} />
+          <ErrorBoundary>
+            <HearingsTab caseId={caseRoom.id} />
+          </ErrorBoundary>
         </TabsContent>
         <TabsContent value="deadlines">
-          <DeadlinesTab caseId={caseRoom.id} />
+          <ErrorBoundary>
+            <DeadlinesTab caseId={caseRoom.id} />
+          </ErrorBoundary>
         </TabsContent>
         <TabsContent value="tasks">
-          <TasksTab caseId={caseRoom.id} />
+          <ErrorBoundary>
+            <TasksTab caseId={caseRoom.id} />
+          </ErrorBoundary>
         </TabsContent>
         <TabsContent value="discovery">
-          <DiscoveryTab caseId={caseRoom.id} />
+          <ErrorBoundary>
+            <DiscoveryTab caseId={caseRoom.id} />
+          </ErrorBoundary>
         </TabsContent>
         <TabsContent value="research">
-          <ResearchTab caseId={caseRoom.id} />
+          <ErrorBoundary>
+            <ResearchTab caseId={caseRoom.id} />
+          </ErrorBoundary>
         </TabsContent>
         <TabsContent value="notes">
-          <NotesTab caseId={caseRoom.id} />
+          <ErrorBoundary>
+            <NotesTab caseId={caseRoom.id} />
+          </ErrorBoundary>
         </TabsContent>
         <TabsContent value="financials">
-          <FinancialsTab caseId={caseRoom.id} />
+          <ErrorBoundary>
+            <FinancialsTab caseId={caseRoom.id} />
+          </ErrorBoundary>
         </TabsContent>
         <TabsContent value="analysis">
-          <AnalysisTab caseId={caseRoom.id} />
+          <ErrorBoundary>
+            <AnalysisTab caseId={caseRoom.id} />
+          </ErrorBoundary>
         </TabsContent>
         <TabsContent value="draft">
-          <DraftTab caseId={caseRoom.id} />
+          <ErrorBoundary>
+            <DraftTab caseId={caseRoom.id} />
+          </ErrorBoundary>
         </TabsContent>
         <TabsContent value="chat">
-          <ChatTab caseId={caseRoom.id} />
+          <ErrorBoundary>
+            <ChatTab caseId={caseRoom.id} />
+          </ErrorBoundary>
         </TabsContent>
         <TabsContent value="client">
-          <ClientTab caseRoom={caseRoom} />
+          <ErrorBoundary>
+            <ClientTab caseRoom={caseRoom} />
+          </ErrorBoundary>
         </TabsContent>
         <TabsContent value="timeline">
-          <TimelineTab caseId={caseRoom.id} />
+          <ErrorBoundary>
+            <TimelineTab caseId={caseRoom.id} />
+          </ErrorBoundary>
         </TabsContent>
       </Tabs>
     </div>

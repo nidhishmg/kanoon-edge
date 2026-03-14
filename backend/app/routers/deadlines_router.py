@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 from app.database import get_db
 from app.models import User, Case, Deadline
@@ -77,6 +77,45 @@ async def create_deadline(
     db.commit()
     db.refresh(item)
     return _to_response(item)
+
+
+@router.post("/{case_id}/recalculate")
+async def recalculate_deadlines(
+    case_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _verify_case(db, case_id, current_user.id)
+    items = db.query(Deadline).filter(Deadline.case_id == case_id).all()
+    today = datetime.now(timezone.utc).date()
+
+    updated = 0
+    for item in items:
+        if not item.due_date:
+            continue
+
+        try:
+            due_date = datetime.strptime(item.due_date, "%Y-%m-%d").date()
+        except ValueError:
+            continue
+
+        if item.status != "completed":
+            new_status = "missed" if due_date < today else "pending"
+            if item.status != new_status:
+                item.status = new_status
+                updated += 1
+
+        if not item.reminder_date:
+            reminder_date = due_date - timedelta(days=3)
+            if reminder_date < today:
+                reminder_date = today
+            item.reminder_date = reminder_date.isoformat()
+            updated += 1
+
+    if updated:
+        db.commit()
+
+    return {"status": "ok", "updated": updated, "count": len(items)}
 
 
 @router.put("/{deadline_id}", response_model=DeadlineResponse)

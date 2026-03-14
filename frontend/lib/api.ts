@@ -40,10 +40,16 @@ function getToken(): string | null {
 
 function setToken(token: string) {
   localStorage.setItem("kanoonedge_token", token);
+  if (typeof document !== "undefined") {
+    document.cookie = `kanoonedge_token=${token}; path=/; max-age=2592000; samesite=lax`;
+  }
 }
 
 function clearToken() {
   localStorage.removeItem("kanoonedge_token");
+  if (typeof document !== "undefined") {
+    document.cookie = "kanoonedge_token=; path=/; max-age=0; samesite=lax";
+  }
 }
 
 // ── Fetch helper ────────────────────────────────────────────
@@ -286,6 +292,20 @@ export const api = {
     getCurrentUser: async (): Promise<User> => {
       return apiFetch<User>("/auth/me");
     },
+    updateProfile: async (payload: {
+      bar_council_number: string;
+      state_bar_council: string;
+      enrollment_year: number;
+      specializations: string[];
+      years_of_practice: string;
+      office_city: string;
+      phone: string;
+    }): Promise<User> => {
+      return apiFetch<User>("/auth/profile", {
+        method: "PUT",
+        body: JSON.stringify(payload),
+      });
+    },
     logout: () => {
       clearToken();
     },
@@ -296,17 +316,24 @@ export const api = {
 
   dashboard: {
     getStats: async (): Promise<DashboardStats> => {
-      // Derive stats from actual data
-      const cases = await api.caseRooms.getAll();
-      return {
-        caseRooms: cases.length,
-        hearingsToday: cases.filter((c) => {
-          const today = new Date().toISOString().split("T")[0];
-          return c.nextHearing === today;
-        }).length,
-        aiAnalyses: cases.reduce((sum, c) => sum + c.loopholesDetected, 0),
-        draftsGenerated: 0,
-      };
+      return apiFetch<DashboardStats>("/dashboard/stats");
+    },
+  },
+
+  legalSearch: {
+    search: async (query: string, page = 0): Promise<{
+      query: string;
+      page: number;
+      results: Array<{
+        title: string;
+        court: string;
+        date: string;
+        citation: string;
+        summary: string;
+        url: string;
+      }>;
+    }> => {
+      return apiFetch(`/legal-search/?query=${encodeURIComponent(query)}&page=${page}`);
     },
   },
 
@@ -417,10 +444,19 @@ export const api = {
     getTemplates: async (): Promise<DraftTemplate[]> => {
       return apiFetch<DraftTemplate[]>("/drafts/templates");
     },
-    generate: async (templateId: string, caseId: string): Promise<string> => {
+    generate: async (
+      templateId: string,
+      caseId: string,
+      options?: { confirmed_fields?: Record<string, unknown>; selected_loophole_ids?: string[] }
+    ): Promise<string> => {
       const data = await apiFetch<{ content: string }>("/drafts/generate", {
         method: "POST",
-        body: JSON.stringify({ template_id: templateId, case_id: caseId }),
+        body: JSON.stringify({
+          template_id: templateId,
+          case_id: caseId,
+          confirmed_fields: options?.confirmed_fields,
+          selected_loophole_ids: options?.selected_loophole_ids,
+        }),
       });
       return data.content;
     },
@@ -579,6 +615,11 @@ export const api = {
     },
     delete: async (deadlineId: string): Promise<void> => {
       await apiFetch(`/deadlines/${deadlineId}`, { method: "DELETE" });
+    },
+    recalculate: async (caseId: string): Promise<{ status: string; updated: number; count: number }> => {
+      return apiFetch<{ status: string; updated: number; count: number }>(`/deadlines/${caseId}/recalculate`, {
+        method: "POST",
+      });
     },
   },
 

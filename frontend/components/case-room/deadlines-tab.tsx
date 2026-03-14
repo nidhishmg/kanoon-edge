@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import type { Deadline } from "@/types";
+import { useCaseRoomStore } from "@/lib/store";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,6 +18,7 @@ import {
   CheckCircle,
   Clock,
   CalendarClock,
+  RefreshCw,
 } from "lucide-react";
 
 interface DeadlinesTabProps {
@@ -38,6 +40,7 @@ const STATUS_ICONS: Record<string, typeof CheckCircle> = {
 };
 
 export function DeadlinesTab({ caseId }: DeadlinesTabProps) {
+  const { setActiveTab } = useCaseRoomStore();
   const queryClient = useQueryClient();
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
@@ -78,6 +81,11 @@ export function DeadlinesTab({ caseId }: DeadlinesTabProps) {
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => api.deadlines.delete(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["deadlines", caseId] }),
+  });
+
+  const recalculateMutation = useMutation({
+    mutationFn: () => api.deadlines.recalculate(caseId),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["deadlines", caseId] }),
   });
 
@@ -141,9 +149,15 @@ export function DeadlinesTab({ caseId }: DeadlinesTabProps) {
           <CalendarClock className="w-5 h-5" />
           Deadlines ({deadlines.length})
         </h3>
-        <Button size="sm" onClick={() => { resetForm(); setShowForm(true); }}>
-          <Plus className="w-4 h-4 mr-2" /> Add Deadline
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="outline" onClick={() => recalculateMutation.mutate()} disabled={recalculateMutation.isPending}>
+            {recalculateMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
+            Recalculate
+          </Button>
+          <Button size="sm" onClick={() => { resetForm(); setShowForm(true); }}>
+            <Plus className="w-4 h-4 mr-2" /> Add Deadline
+          </Button>
+        </div>
       </div>
 
       {showForm && (
@@ -194,9 +208,17 @@ export function DeadlinesTab({ caseId }: DeadlinesTabProps) {
 
       {deadlines.length === 0 && !showForm ? (
         <Card>
-          <CardContent className="py-8 text-center text-muted-foreground">
+          <CardContent className="py-8 text-center text-muted-foreground space-y-3">
             <CalendarClock className="w-10 h-10 mx-auto mb-3 opacity-30" />
-            <p>No deadlines set. Add deadlines to track filing dates, response due dates, and court-mandated timelines.</p>
+            <p>No deadlines set yet.</p>
+            <p className="text-xs">Add your first filing date, or import hearing-driven dates from timeline events.</p>
+            <div className="flex items-center justify-center gap-2">
+              <Button size="sm" onClick={() => { resetForm(); setShowForm(true); }}>
+                <Plus className="w-4 h-4 mr-2" />
+                Add Deadline
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => setActiveTab("timeline")}>Open Timeline</Button>
+            </div>
           </CardContent>
         </Card>
       ) : (

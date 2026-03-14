@@ -28,6 +28,13 @@ class User(Base):
     password_hash = Column(String(255), nullable=False)
     role = Column(String(50), default="lawyer")
     plan = Column(String(50), default="free")
+    bar_council_number = Column(String(100), nullable=True)
+    state_bar_council = Column(String(100), nullable=True)
+    enrollment_year = Column(Integer, nullable=True)
+    specializations = Column(Text, nullable=True)  # JSON array stored as text
+    years_of_practice = Column(String(20), nullable=True)
+    office_city = Column(String(120), nullable=True)
+    phone = Column(String(20), nullable=True)
     created_at = Column(DateTime(timezone=True), default=utcnow)
     last_login = Column(DateTime(timezone=True), nullable=True)
 

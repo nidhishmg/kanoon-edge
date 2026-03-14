@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import List
+from typing import List, Optional, Dict, Any
 
 
 class DraftTemplateResponse(BaseModel):
@@ -13,6 +13,8 @@ class DraftTemplateResponse(BaseModel):
 class DraftRequest(BaseModel):
     template_id: str
     case_id: str
+    confirmed_fields: Optional[Dict[str, Any]] = None
+    selected_loophole_ids: Optional[List[str]] = None
 
 
 class DraftResponse(BaseModel):

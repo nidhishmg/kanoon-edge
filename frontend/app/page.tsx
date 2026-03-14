@@ -99,47 +99,31 @@ const steps = [
 
 const plans = [
   {
-    name: "Starter",
-    price: "Free",
-    description: "For individual lawyers exploring AI",
-    features: [
-      "2 Case Rooms",
-      "10 document uploads",
-      "Basic analysis",
-      "Email support",
-    ],
-    cta: "Get Started",
-    popular: false,
-  },
-  {
-    name: "Professional",
-    price: "₹2,999",
+    name: "Pro",
+    price: "₹999",
     period: "/month",
-    description: "For practicing advocates",
+    description: "For individual advocates getting started",
     features: [
       "Unlimited Case Rooms",
-      "Unlimited uploads",
-      "Advanced AI analysis",
-      "Draft generation",
-      "Case chat assistant",
-      "Priority support",
+      "AI-powered case analysis",
+      "Secure client portal",
     ],
-    cta: "Start Free Trial",
+    cta: "Get Started Free",
     popular: true,
   },
   {
-    name: "Enterprise",
-    price: "Custom",
-    description: "For law firms and legal teams",
+    name: "Ultimate",
+    price: "₹1,999",
+    period: "/month",
+    description: "For high-volume practitioners and growing chambers",
     features: [
-      "Everything in Professional",
-      "Team collaboration",
-      "Custom AI models",
-      "API access",
-      "Dedicated account manager",
-      "On-premise deployment",
+      "Everything in Pro",
+      "Advanced drafting workflows",
+      "Priority support",
+      "Extended analysis depth",
+      "Team-ready collaboration",
     ],
-    cta: "Contact Sales",
+    cta: "Start Free Trial",
     popular: false,
   },
 ];
@@ -193,8 +177,8 @@ export default function LandingPage() {
               className="flex flex-col sm:flex-row items-center justify-center gap-4"
             >
               <Button size="xl" asChild>
-                <Link href="/auth/login">
-                  Create Your First Case Room
+                <Link href="/auth/signup">
+                  Get Started Free
                   <ArrowRight className="w-4 h-4 ml-2" />
                 </Link>
               </Button>
@@ -495,7 +479,7 @@ export default function LandingPage() {
                       variant={plan.popular ? "default" : "outline"}
                       asChild
                     >
-                      <Link href="/auth/login">{plan.cta}</Link>
+                      <Link href="/auth/signup">{plan.cta}</Link>
                     </Button>
                   </CardContent>
                 </Card>
@@ -519,13 +503,13 @@ export default function LandingPage() {
               </p>
               <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
                 <Button size="xl" asChild>
-                  <Link href="/auth/login">
+                  <Link href="/auth/signup">
                     Start Your Free Trial
                     <ArrowRight className="w-4 h-4 ml-2" />
                   </Link>
                 </Button>
-                <Button size="xl" variant="outline">
-                  Schedule a Demo
+                <Button size="xl" variant="outline" asChild>
+                  <Link href="/auth/signup">Request Early Access</Link>
                 </Button>
               </div>
             </CardContent>

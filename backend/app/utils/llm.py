@@ -168,6 +168,8 @@ def generate_legal_draft(
     applicable_sections: List[str] = None,
     client_name: str = "",
     opposing_counsel: str = "",
+    confirmed_fields: dict | None = None,
+    selected_grounds: List[dict] | None = None,
 ) -> str:
     """Generate a legal draft using AI.
 
@@ -189,6 +191,19 @@ def generate_legal_draft(
     }
     template_name = template_names.get(template_id, template_id)
 
+    selected_grounds = selected_grounds or []
+    confirmed_fields = confirmed_fields or {}
+    selected_grounds_text = "\n".join(
+        [
+            f"{idx + 1}. {g.get('title', 'Ground')} - {g.get('description', '')}".strip()
+            for idx, g in enumerate(selected_grounds)
+        ]
+    ) or "No specific grounds selected"
+
+    confirmed_fields_text = "\n".join(
+        [f"{k}: {v}" for k, v in confirmed_fields.items() if v not in (None, "")]
+    ) or "No additional confirmed fields provided"
+
     prompt = f"""You are an expert Indian legal document drafter. Generate professional, court-ready legal documents.
 Follow proper Indian legal formatting with correct citations. Use formal legal language appropriate for Indian courts.
 
@@ -204,6 +219,14 @@ Opposing Counsel: {opposing_counsel or '[Opposing Counsel]'}
 
 Context from case documents:
 {document_context[:2000] if document_context else 'No documents available'}
+
+Confirmed fields from lawyer review:
+{confirmed_fields_text}
+
+Selected grounds to include (if applicable):
+{selected_grounds_text}
+
+Instruction: If selected grounds are provided, include only those as numbered grounds in the draft.
 
 Generate a complete, professional legal document ready for review and filing."""
 

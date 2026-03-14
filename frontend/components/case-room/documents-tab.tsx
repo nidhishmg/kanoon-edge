@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -14,6 +14,9 @@ import {
   Loader2,
   AlertCircle,
   Search,
+  ListChecks,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -27,6 +30,53 @@ import { DocumentViewer } from "@/components/case-room/document-viewer";
 
 interface DocumentsTabProps {
   caseId: string;
+  caseType?: string;
+}
+
+type Recommendation = {
+  name: string;
+  priority: "Critical" | "High" | "Medium";
+  why: string;
+};
+
+const recommendationRules: Record<string, Recommendation[]> = {
+  criminal: [
+    { name: "FIR", priority: "Critical", why: "Foundation record for allegations and timeline consistency checks." },
+    { name: "Arrest Memo", priority: "Critical", why: "Required to validate arrest procedure and custody claims." },
+    { name: "Charge Sheet", priority: "High", why: "Core prosecution theory and evidence list for contradictions." },
+    { name: "Section 41A Notice / Absence Proof", priority: "Critical", why: "Key for default-bail and procedural non-compliance arguments." },
+    { name: "Remand Application", priority: "High", why: "Helps test prosecution grounds for custody extension." },
+    { name: "Medical Examination Report", priority: "Medium", why: "Can corroborate or undermine allegation timelines." },
+    { name: "Witness Statements", priority: "Medium", why: "Useful for contradiction mapping and cross-examination prep." },
+    { name: "Previous Bail Order", priority: "High", why: "Mandatory context for re-application strategy and changed circumstances." },
+    { name: "Surety Details", priority: "Medium", why: "Speeds filing and reduces hearing-stage delays." },
+  ],
+  civil: [
+    { name: "Plaint / Written Statement", priority: "Critical", why: "Primary pleadings define disputes and admissible issues." },
+    { name: "List of Documents", priority: "High", why: "Establishes documentary basis for each pleaded fact." },
+    { name: "Previous Orders", priority: "High", why: "Tracks procedural history and interim directions." },
+    { name: "Affidavit", priority: "Medium", why: "Supports factual assertions and interim applications." },
+    { name: "Agreement / Contract in Dispute", priority: "Critical", why: "Central instrument for interpretation and breach arguments." },
+    { name: "Title Documents", priority: "High", why: "Essential for civil/property ownership and possession claims." },
+  ],
+  family: [
+    { name: "Marriage Certificate", priority: "Critical", why: "Core document for maintainability and relationship status." },
+    { name: "Birth Certificates of Children", priority: "High", why: "Required for custody, maintenance, and welfare submissions." },
+    { name: "Bank Statements (6 months)", priority: "Medium", why: "Supports maintenance claims and financial capacity analysis." },
+    { name: "Property Documents", priority: "Medium", why: "Relevant for residence rights and distribution disputes." },
+    { name: "Income Proof", priority: "Medium", why: "Helps establish earning capacity and relief quantification." },
+  ],
+  writ: [
+    { name: "Impugned Order / Notification", priority: "Critical", why: "Subject matter document for challenge scope and grounds." },
+    { name: "Representation to Authority", priority: "High", why: "Shows prior approach and procedural fairness timeline." },
+    { name: "Authority Reply", priority: "Medium", why: "Identifies reasons to be challenged in writ pleadings." },
+  ],
+};
+
+function getPriorityVariant(priority: Recommendation["priority"]): "destructive" | "warning" | "secondary" {
+  if (priority === "Critical") return "destructive";
+  if (priority === "High") return "warning";
+  return "secondary";
 }
 
 const statusIcons: Record<Document["status"], React.ComponentType<{ className?: string }>> = {
@@ -36,11 +86,18 @@ const statusIcons: Record<Document["status"], React.ComponentType<{ className?: 
   error: AlertCircle,
 };
 
-export function DocumentsTab({ caseId }: DocumentsTabProps) {
+export function DocumentsTab({ caseId, caseType }: DocumentsTabProps) {
   const [dragActive, setDragActive] = useState(false);
   const [viewingDoc, setViewingDoc] = useState<Document | null>(null);
   const [filter, setFilter] = useState("");
+  const [showRecommendations, setShowRecommendations] = useState(true);
   const { documents, setDocuments, addDocument } = useCaseRoomStore();
+  const recommendationInputs = useRef<Record<string, HTMLInputElement | null>>({});
+
+  const { data: caseRoom } = useQuery({
+    queryKey: ["case-room", caseId],
+    queryFn: () => api.caseRooms.getById(caseId),
+  });
 
   useQuery({
     queryKey: ["documents", caseId],
@@ -69,7 +126,7 @@ export function DocumentsTab({ caseId }: DocumentsTabProps) {
         addDocument(doc);
       }
     },
-    [addDocument]
+    [addDocument, caseId]
   );
 
   const handleFileChange = useCallback(
@@ -80,7 +137,7 @@ export function DocumentsTab({ caseId }: DocumentsTabProps) {
         addDocument(doc);
       }
     },
-    [addDocument]
+    [addDocument, caseId]
   );
 
   const filtered = filter
@@ -90,6 +147,29 @@ export function DocumentsTab({ caseId }: DocumentsTabProps) {
           d.type.toLowerCase().includes(filter.toLowerCase())
       )
     : documents;
+
+  const recommendedChecklist = useMemo(() => {
+    const source = (caseType || caseRoom?.caseType || "").toLowerCase();
+    if (source.includes("bail") || source.includes("criminal")) return recommendationRules.criminal;
+    if (source.includes("civil")) return recommendationRules.civil;
+    if (source.includes("family")) return recommendationRules.family;
+    if (source.includes("writ")) return recommendationRules.writ;
+    return recommendationRules.criminal;
+  }, [caseRoom?.caseType, caseType]);
+
+  const checklistStatus = useMemo(
+    () =>
+      recommendedChecklist.map((item) => {
+        const key = item.name.toLowerCase();
+        const isUploaded = documents.some(
+          (doc) => doc.name.toLowerCase().includes(key) || doc.type.toLowerCase().includes(key)
+        );
+        return { ...item, isUploaded };
+      }),
+    [recommendedChecklist, documents]
+  );
+
+  const hasFiveOrMoreDocs = documents.length >= 5;
 
   if (viewingDoc) {
     return <DocumentViewer document={viewingDoc} onClose={() => setViewingDoc(null)} />;
@@ -129,6 +209,77 @@ export function DocumentsTab({ caseId }: DocumentsTabProps) {
       {/* Document list */}
       <Card>
         <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <ListChecks className="w-4 h-4" />
+              Recommended Checklist
+            </CardTitle>
+            {hasFiveOrMoreDocs ? (
+              <Button variant="ghost" size="sm" onClick={() => setShowRecommendations((v) => !v)}>
+                {showRecommendations ? (
+                  <>
+                    <ChevronUp className="w-4 h-4 mr-1" />
+                    Hide Recommendations
+                  </>
+                ) : (
+                  <>
+                    <ChevronDown className="w-4 h-4 mr-1" />
+                    View Recommendations
+                  </>
+                )}
+              </Button>
+            ) : null}
+          </div>
+        </CardHeader>
+        {(!hasFiveOrMoreDocs || showRecommendations) ? (
+          <CardContent className="space-y-3">
+            {checklistStatus.map((item) => (
+              <div key={item.name} className="rounded-md border border-border px-3 py-3">
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm text-foreground font-medium">{item.name}</p>
+                      <Badge variant={getPriorityVariant(item.priority)}>{item.priority}</Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground">{item.why}</p>
+                  </div>
+                  {item.isUploaded ? (
+                    <Badge variant="success">Uploaded</Badge>
+                  ) : (
+                    <>
+                      <input
+                        type="file"
+                        className="hidden"
+                        accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                        ref={(el) => {
+                          recommendationInputs.current[item.name] = el;
+                        }}
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          const doc = await api.documents.upload(caseId, file, item.name, true);
+                          addDocument(doc);
+                          e.currentTarget.value = "";
+                        }}
+                      />
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => recommendationInputs.current[item.name]?.click()}
+                      >
+                        Upload
+                      </Button>
+                    </>
+                  )}
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        ) : null}
+      </Card>
+
+      <Card>
+        <CardHeader>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <CardTitle className="flex items-center gap-2">
               Uploaded Documents
@@ -153,7 +304,7 @@ export function DocumentsTab({ caseId }: DocumentsTabProps) {
                 {filter ? "No documents match your search" : "No documents uploaded yet"}
               </p>
               <p className="text-sm text-muted-foreground mt-1">
-                {filter ? "Try a different search term" : "Upload documents using the area above"}
+                {filter ? "Try a different search term" : "Upload documents to unlock timeline and evidence insights."}
               </p>
             </div>
           ) : (

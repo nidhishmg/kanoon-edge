@@ -310,6 +310,13 @@ export interface User {
   email: string;
   plan: "free" | "pro" | "enterprise";
   avatar?: string;
+  barCouncilNumber?: string;
+  stateBarCouncil?: string;
+  enrollmentYear?: number;
+  specializations?: string[];
+  yearsOfPractice?: string;
+  officeCity?: string;
+  phone?: string;
 }
 
 // ─── Evidence ────────────────────────────────────────────────

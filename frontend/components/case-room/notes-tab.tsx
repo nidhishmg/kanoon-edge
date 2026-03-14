@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import type { CaseNote } from "@/types";
+import { useCaseRoomStore } from "@/lib/store";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,6 +23,7 @@ interface NotesTabProps {
 }
 
 export function NotesTab({ caseId }: NotesTabProps) {
+  const { setActiveTab } = useCaseRoomStore();
   const queryClient = useQueryClient();
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
@@ -155,10 +157,17 @@ export function NotesTab({ caseId }: NotesTabProps) {
 
       {notes.length === 0 ? (
         <Card>
-          <CardContent className="py-12 text-center text-muted-foreground">
+          <CardContent className="py-12 text-center text-muted-foreground space-y-3">
             <StickyNote className="w-8 h-8 mx-auto mb-3 opacity-50" />
             <p>No notes yet.</p>
             <p className="text-xs mt-1">Add notes to document your strategy, observations, and research.</p>
+            <div className="flex items-center justify-center gap-2">
+              <Button size="sm" onClick={() => setShowForm(true)}>
+                <Plus className="w-4 h-4 mr-2" />
+                Add Note
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => setActiveTab("chat")}>Open Chat</Button>
+            </div>
           </CardContent>
         </Card>
       ) : (

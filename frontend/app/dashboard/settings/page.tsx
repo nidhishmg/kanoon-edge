@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 
 export default function SettingsPage() {
   return (
-    <div className="max-w-container mx-auto max-w-3xl">
+    <div className="mx-auto max-w-3xl">
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-foreground mb-1">Settings</h1>
         <p className="text-muted-foreground">

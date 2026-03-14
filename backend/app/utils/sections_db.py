@@ -1,5 +1,6 @@
 """Hardcoded IPC / BNS / CrPC sections database for Indian legal system."""
 
+import re
 from typing import Optional
 
 
@@ -204,12 +205,14 @@ _add("BNS", "63", "Rape", "10 years to Life", False, True, True)
 
 def lookup_section(raw: str) -> Optional[dict]:
     """Look up a section by its raw string (e.g. '302', 'IPC 302', '498A', 'CrPC 167(2)')."""
-    cleaned = raw.strip().lower().replace(" ", "").replace("sec.", "").replace("section", "")
+    cleaned = (raw or "").strip().lower()
+    cleaned = cleaned.replace("u/s", "").replace("sec.", "").replace("section", "")
+    cleaned = re.sub(r"[^a-z0-9()]+", "", cleaned)
     # Try direct lookup
     if cleaned in _SECTIONS_DB:
         return _SECTIONS_DB[cleaned].to_dict()
     # Try without IPC/BNS prefix
-    for prefix in ("ipc", "bns", "crpc", "dpa", "pocso", "ndps", "itact", "sc/stact"):
+    for prefix in ("ipc", "bns", "crpc", "dpa", "pocso", "ndps", "itact", "scstact"):
         if cleaned.startswith(prefix):
             remainder = cleaned[len(prefix):]
             if remainder in _SECTIONS_DB:

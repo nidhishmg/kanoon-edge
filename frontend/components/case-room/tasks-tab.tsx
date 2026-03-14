@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import type { Task } from "@/types";
+import { useCaseRoomStore } from "@/lib/store";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -38,6 +39,7 @@ interface TasksTabProps {
 }
 
 export function TasksTab({ caseId }: TasksTabProps) {
+  const { setActiveTab } = useCaseRoomStore();
   const queryClient = useQueryClient();
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({
@@ -160,10 +162,17 @@ export function TasksTab({ caseId }: TasksTabProps) {
 
       {tasks.length === 0 ? (
         <Card>
-          <CardContent className="py-12 text-center text-muted-foreground">
+          <CardContent className="py-12 text-center text-muted-foreground space-y-3">
             <CheckSquare className="w-8 h-8 mx-auto mb-3 opacity-50" />
             <p>No tasks yet.</p>
             <p className="text-xs mt-1">Create tasks to track deadlines and action items for this case.</p>
+            <div className="flex items-center justify-center gap-2">
+              <Button size="sm" onClick={() => setShowForm(true)}>
+                <Plus className="w-4 h-4 mr-2" />
+                Create Task
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => setActiveTab("deadlines")}>Open Deadlines</Button>
+            </div>
           </CardContent>
         </Card>
       ) : (
@@ -200,7 +209,7 @@ export function TasksTab({ caseId }: TasksTabProps) {
                                 <p className="text-xs text-muted-foreground truncate">{task.description}</p>
                               )}
                               <div className="flex items-center gap-2 mt-1">
-                                <Badge variant={PRIORITY_COLORS[task.priority] as "default" | "secondary" | "destructive"} className="text-[10px]">
+                                <Badge variant={PRIORITY_COLORS[task.priority] as "default" | "secondary" | "warning" | "destructive"} className="text-[10px]">
                                   {task.priority}
                                 </Badge>
                                 {task.dueDate && (

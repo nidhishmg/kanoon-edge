@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import type { DiscoveryRequest } from "@/types";
+import { useCaseRoomStore } from "@/lib/store";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,8 +15,6 @@ import {
   Trash2,
   Loader2,
   Edit3,
-  ArrowUpRight,
-  ArrowDownLeft,
 } from "lucide-react";
 
 interface DiscoveryTabProps {
@@ -40,15 +39,13 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 export function DiscoveryTab({ caseId }: DiscoveryTabProps) {
+  const { setActiveTab } = useCaseRoomStore();
   const queryClient = useQueryClient();
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState({
     title: "",
     discovery_type: "interrogatory",
-    direction: "outgoing",
-    served_to: "",
-    served_date: "",
     due_date: "",
     notes: "",
   });
@@ -81,7 +78,7 @@ export function DiscoveryTab({ caseId }: DiscoveryTabProps) {
   });
 
   function resetForm() {
-    setForm({ title: "", discovery_type: "interrogatory", direction: "outgoing", served_to: "", served_date: "", due_date: "", notes: "" });
+    setForm({ title: "", discovery_type: "interrogatory", due_date: "", notes: "" });
     setShowForm(false);
     setEditId(null);
   }
@@ -90,9 +87,6 @@ export function DiscoveryTab({ caseId }: DiscoveryTabProps) {
     setForm({
       title: item.title,
       discovery_type: item.discoveryType,
-      direction: item.direction,
-      served_to: item.servedTo || "",
-      served_date: item.servedDate || "",
       due_date: item.dueDate || "",
       notes: item.notes || "",
     });
@@ -133,7 +127,7 @@ export function DiscoveryTab({ caseId }: DiscoveryTabProps) {
         <Card>
           <CardContent className="pt-4 space-y-3">
             <Input placeholder="Request Title *" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 gap-3">
               <select className="border rounded-md px-3 py-2 text-sm" value={form.discovery_type} onChange={(e) => setForm({ ...form, discovery_type: e.target.value })}>
                 <option value="interrogatory">Interrogatories</option>
                 <option value="rfp">Request for Production</option>
@@ -141,17 +135,6 @@ export function DiscoveryTab({ caseId }: DiscoveryTabProps) {
                 <option value="deposition">Deposition</option>
                 <option value="subpoena">Subpoena</option>
               </select>
-              <select className="border rounded-md px-3 py-2 text-sm" value={form.direction} onChange={(e) => setForm({ ...form, direction: e.target.value })}>
-                <option value="outgoing">Outgoing</option>
-                <option value="incoming">Incoming</option>
-              </select>
-              <Input placeholder="Served To" value={form.served_to} onChange={(e) => setForm({ ...form, served_to: e.target.value })} />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs text-muted-foreground">Served Date</label>
-                <Input type="date" value={form.served_date} onChange={(e) => setForm({ ...form, served_date: e.target.value })} />
-              </div>
               <div>
                 <label className="text-xs text-muted-foreground">Due Date</label>
                 <Input type="date" value={form.due_date} onChange={(e) => setForm({ ...form, due_date: e.target.value })} />
@@ -171,9 +154,19 @@ export function DiscoveryTab({ caseId }: DiscoveryTabProps) {
 
       {requests.length === 0 && !showForm ? (
         <Card>
-          <CardContent className="py-8 text-center text-muted-foreground">
+          <CardContent className="py-8 text-center text-muted-foreground space-y-3">
             <Search className="w-10 h-10 mx-auto mb-3 opacity-30" />
-            <p>No discovery requests. Track interrogatories, requests for production, depositions, and more.</p>
+            <p>No discovery requests yet.</p>
+            <p className="text-xs">Start with one outgoing interrogatory or collect incoming requests from opposite counsel.</p>
+            <div className="flex items-center justify-center gap-2">
+              <Button size="sm" onClick={() => setShowForm(true)}>
+                <Plus className="w-4 h-4 mr-2" />
+                Create Request
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => setActiveTab("documents")}>
+                Open Documents
+              </Button>
+            </div>
           </CardContent>
         </Card>
       ) : (
@@ -184,11 +177,6 @@ export function DiscoveryTab({ caseId }: DiscoveryTabProps) {
                 <div className="flex items-start justify-between">
                   <div className="space-y-1 flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
-                      {item.direction === "outgoing" ? (
-                        <ArrowUpRight className="w-4 h-4 text-blue-500" />
-                      ) : (
-                        <ArrowDownLeft className="w-4 h-4 text-green-500" />
-                      )}
                       <span className="font-medium">{item.title}</span>
                       <Badge variant="outline" className="text-xs">{TYPE_LABELS[item.discoveryType] || item.discoveryType}</Badge>
                       <span className={`text-xs px-2 py-0.5 rounded-full ${STATUS_COLORS[item.status] || "bg-gray-100 text-gray-700"}`}>
@@ -196,8 +184,6 @@ export function DiscoveryTab({ caseId }: DiscoveryTabProps) {
                       </span>
                     </div>
                     <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                      {item.servedTo && <span>To: {item.servedTo}</span>}
-                      {item.servedDate && <span>Served: {item.servedDate}</span>}
                       {item.dueDate && <span>Due: {item.dueDate}</span>}
                       {item.responseDate && <span>Responded: {item.responseDate}</span>}
                     </div>

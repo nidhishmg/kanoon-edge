@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -15,10 +15,13 @@ import {
   Download,
   Check,
   RefreshCw,
+  AlertTriangle,
+  CheckCircle2,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { api } from "@/lib/api";
 import { useCaseRoomStore } from "@/lib/store";
 
@@ -37,20 +40,79 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
 
 export function DraftTab({ caseId }: DraftTabProps) {
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
+  const [showConfirm, setShowConfirm] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [copied, setCopied] = useState(false);
   const { generatedDraft, setGeneratedDraft } = useCaseRoomStore();
+  const { analysisResults } = useCaseRoomStore();
+
+  const { data: caseRoom } = useQuery({
+    queryKey: ["case-room", caseId],
+    queryFn: () => api.caseRooms.getById(caseId),
+  });
+
+  const [confirmedFields, setConfirmedFields] = useState<Record<string, string>>({});
+  const [selectedGroundIds, setSelectedGroundIds] = useState<string[]>([]);
 
   const { data: templates } = useQuery({
     queryKey: ["draft-templates"],
     queryFn: api.drafts.getTemplates,
   });
 
+  const templateNeeds = useMemo(() => {
+    const isBailTemplate = selectedTemplate === "bail-application" || selectedTemplate === "anticipatory-bail";
+    if (!isBailTemplate || !caseRoom) return [] as Array<{ key: string; label: string; value: string; mandatory: boolean }>;
+    return [
+      { key: "case_title", label: "Case Title", value: caseRoom.title || "", mandatory: true },
+      { key: "case_number", label: "Case Number", value: caseRoom.caseNumber || "", mandatory: true },
+      { key: "court", label: "Court Name", value: caseRoom.court || "", mandatory: true },
+      { key: "client_name", label: "Client Full Name", value: caseRoom.clientName || "", mandatory: true },
+      { key: "fathers_name", label: "Client Father's Name", value: "", mandatory: false },
+      { key: "client_age", label: "Client Age", value: "", mandatory: false },
+      { key: "client_occupation", label: "Client Occupation", value: "", mandatory: false },
+      { key: "client_address", label: "Client Address", value: "", mandatory: false },
+      { key: "fir_number", label: "FIR Number", value: caseRoom.firNumber || "", mandatory: false },
+      { key: "police_station", label: "Police Station", value: caseRoom.policeStation || "", mandatory: false },
+      { key: "arrest_date", label: "Date of Arrest", value: caseRoom.arrestDate || "", mandatory: false },
+      {
+        key: "applicable_sections",
+        label: "Sections Applied",
+        value: (caseRoom.applicableSections || []).join(", "),
+        mandatory: true,
+      },
+      { key: "custody_status", label: "Current Custody Status", value: caseRoom.inCustody ? "In custody" : "Not in custody", mandatory: true },
+      { key: "custody_days", label: "Days in Custody", value: String(caseRoom.custodyDays || ""), mandatory: false },
+    ];
+  }, [selectedTemplate, caseRoom]);
+
+  const availableGrounds = useMemo(() => {
+    return analysisResults.filter((r) => ["loophole", "argument", "contradiction"].includes(r.type));
+  }, [analysisResults]);
+
+  const mandatoryMissing = useMemo(() => {
+    return templateNeeds
+      .filter((row) => row.mandatory)
+      .some((row) => !(confirmedFields[row.key] ?? row.value ?? "").toString().trim());
+  }, [templateNeeds, confirmedFields]);
+
+  const openConfirm = () => {
+    if (!selectedTemplate) return;
+    const defaults: Record<string, string> = {};
+    for (const item of templateNeeds) defaults[item.key] = item.value || "";
+    setConfirmedFields(defaults);
+    setSelectedGroundIds(availableGrounds.filter((r) => r.severity === "high").map((r) => r.id));
+    setShowConfirm(true);
+  };
+
   const handleGenerate = async () => {
     if (!selectedTemplate) return;
     setGenerating(true);
-    const draft = await api.drafts.generate(selectedTemplate, caseId);
+    const draft = await api.drafts.generate(selectedTemplate, caseId, {
+      confirmed_fields: confirmedFields,
+      selected_loophole_ids: selectedGroundIds,
+    });
     setGeneratedDraft(draft);
+    setShowConfirm(false);
     setGenerating(false);
   };
 
@@ -124,7 +186,7 @@ export function DraftTab({ caseId }: DraftTabProps) {
               <Button
                 className="w-full mt-4"
                 disabled={!selectedTemplate || generating}
-                onClick={handleGenerate}
+                onClick={openConfirm}
               >
                 {generating ? (
                   <>
@@ -134,12 +196,79 @@ export function DraftTab({ caseId }: DraftTabProps) {
                 ) : (
                   <>
                     <Sparkles className="w-4 h-4 mr-2" />
-                    Generate Draft
+                    Continue to Confirm
                   </>
                 )}
               </Button>
             </CardContent>
           </Card>
+
+          {showConfirm && selectedTemplate ? (
+            <Card className="mt-4">
+              <CardHeader>
+                <CardTitle className="text-base">Auto-fill Confirmation</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="space-y-2">
+                  {templateNeeds.map((row) => {
+                    const value = confirmedFields[row.key] ?? row.value ?? "";
+                    const missing = !value.trim();
+                    return (
+                      <div key={row.key} className="grid grid-cols-1 gap-2 rounded-md border border-border p-3">
+                        <div className="flex items-center gap-2">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{row.label}</p>
+                          {!missing ? (
+                            <CheckCircle2 className="w-3.5 h-3.5 text-success" />
+                          ) : row.mandatory ? (
+                            <AlertTriangle className="w-3.5 h-3.5 text-destructive" />
+                          ) : (
+                            <AlertTriangle className="w-3.5 h-3.5 text-warning" />
+                          )}
+                        </div>
+                        <Input
+                          value={value}
+                          onChange={(e) => setConfirmedFields((prev) => ({ ...prev, [row.key]: e.target.value }))}
+                          placeholder={row.mandatory ? "Required — must enter before generating" : "Enter manually"}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Select Grounds</p>
+                  {availableGrounds.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">No analysis findings available yet. Run analysis to add selectable grounds.</p>
+                  ) : (
+                    availableGrounds.map((r) => {
+                      const checked = selectedGroundIds.includes(r.id);
+                      return (
+                        <label key={r.id} className="flex items-start gap-2 text-sm rounded-md border border-border p-2">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={(e) => {
+                              const on = e.target.checked;
+                              setSelectedGroundIds((prev) => (on ? [...prev, r.id] : prev.filter((id) => id !== r.id)));
+                            }}
+                          />
+                          <span>
+                            <span className="font-medium text-foreground">{r.title}</span>
+                            <span className="text-xs text-muted-foreground block">{r.description}</span>
+                          </span>
+                        </label>
+                      );
+                    })
+                  )}
+                </div>
+
+                <Button className="w-full" onClick={handleGenerate} disabled={mandatoryMissing || generating}>
+                  {generating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                  Proceed to Generate
+                </Button>
+              </CardContent>
+            </Card>
+          ) : null}
         </div>
 
         {/* Right — Draft editor */}

@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import inspect, text
+from app.config import get_settings
 
 from app.database import engine, SessionLocal, Base
 from app.routers import (
@@ -26,6 +27,8 @@ from app.routers import (
     judge_router,
     client_router,
     client_public_router,
+    dashboard_router,
+    research_search_router,
 )
 from app.utils.seed import seed_dev_user
 
@@ -54,6 +57,20 @@ def _ensure_legacy_columns():
         statements.append("ALTER TABLE documents ADD COLUMN uploaded_by_client BOOLEAN DEFAULT 0")
     if not has_col("documents", "document_request_id"):
         statements.append("ALTER TABLE documents ADD COLUMN document_request_id VARCHAR(36)")
+    if not has_col("users", "bar_council_number"):
+        statements.append("ALTER TABLE users ADD COLUMN bar_council_number VARCHAR(100)")
+    if not has_col("users", "state_bar_council"):
+        statements.append("ALTER TABLE users ADD COLUMN state_bar_council VARCHAR(100)")
+    if not has_col("users", "enrollment_year"):
+        statements.append("ALTER TABLE users ADD COLUMN enrollment_year INTEGER")
+    if not has_col("users", "specializations"):
+        statements.append("ALTER TABLE users ADD COLUMN specializations TEXT")
+    if not has_col("users", "years_of_practice"):
+        statements.append("ALTER TABLE users ADD COLUMN years_of_practice VARCHAR(20)")
+    if not has_col("users", "office_city"):
+        statements.append("ALTER TABLE users ADD COLUMN office_city VARCHAR(120)")
+    if not has_col("users", "phone"):
+        statements.append("ALTER TABLE users ADD COLUMN phone VARCHAR(20)")
 
     if not statements:
         return
@@ -88,9 +105,19 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+settings = get_settings()
+allowed_origins = settings.allowed_origins_list
+if settings.ENVIRONMENT.lower() != "production" and not allowed_origins:
+    allowed_origins = [
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "http://localhost:3002",
+        "http://localhost:3003",
+    ]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:3001", "http://localhost:3002", "http://localhost:3003"],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -116,6 +143,8 @@ app.include_router(communications_router.router, prefix="/api/communications", t
 app.include_router(judge_router.router, prefix="/api/judges", tags=["Judges"])
 app.include_router(client_router.router, prefix="/api", tags=["Clients"])
 app.include_router(client_public_router.router, prefix="/api", tags=["Client Public"])
+app.include_router(dashboard_router.router, prefix="/api/dashboard", tags=["Dashboard"])
+app.include_router(research_search_router.router, prefix="/api/legal-search", tags=["Legal Search"])
 
 
 @app.get("/")

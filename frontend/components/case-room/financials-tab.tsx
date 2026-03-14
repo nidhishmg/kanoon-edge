@@ -114,10 +114,6 @@ function TimeSection({ caseId }: { caseId: string }) {
     }
   }
 
-  const totalHours = entries.reduce((sum, e) => sum + e.hours, 0);
-  const totalAmount = entries.reduce((sum, e) => sum + e.amount, 0);
-  const billableHours = entries.filter(e => e.isBillable).reduce((sum, e) => sum + e.hours, 0);
-
   if (isLoading) {
     return <div className="flex items-center justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>;
   }
@@ -132,13 +128,6 @@ function TimeSection({ caseId }: { caseId: string }) {
         <Button size="sm" onClick={() => { resetForm(); setShowForm(true); }}>
           <Plus className="w-4 h-4 mr-2" /> Log Time
         </Button>
-      </div>
-
-      {/* Summary */}
-      <div className="grid grid-cols-3 gap-3">
-        <Card><CardContent className="py-3 text-center"><div className="text-2xl font-bold">{totalHours.toFixed(1)}</div><div className="text-xs text-muted-foreground">Total Hours</div></CardContent></Card>
-        <Card><CardContent className="py-3 text-center"><div className="text-2xl font-bold">{billableHours.toFixed(1)}</div><div className="text-xs text-muted-foreground">Billable Hours</div></CardContent></Card>
-        <Card><CardContent className="py-3 text-center"><div className="text-2xl font-bold">&#8377;{totalAmount.toFixed(0)}</div><div className="text-xs text-muted-foreground">Total Amount</div></CardContent></Card>
       </div>
 
       {showForm && (
@@ -186,9 +175,16 @@ function TimeSection({ caseId }: { caseId: string }) {
 
       {entries.length === 0 && !showForm ? (
         <Card>
-          <CardContent className="py-8 text-center text-muted-foreground">
+          <CardContent className="py-8 text-center text-muted-foreground space-y-3">
             <Clock className="w-10 h-10 mx-auto mb-3 opacity-30" />
-            <p>No time entries yet. Log your billable hours for this case.</p>
+            <p>No time entries yet.</p>
+            <p className="text-xs">Log drafting, hearings, and client-call hours for accurate billing.</p>
+            <div>
+              <Button size="sm" onClick={() => { resetForm(); setShowForm(true); }}>
+                <Plus className="w-4 h-4 mr-2" />
+                Log First Entry
+              </Button>
+            </div>
           </CardContent>
         </Card>
       ) : (
@@ -296,8 +292,6 @@ function ExpenseSection({ caseId }: { caseId: string }) {
     }
   }
 
-  const totalExpenses = expenses.reduce((sum, e) => sum + e.amount, 0);
-
   if (isLoading) {
     return <div className="flex items-center justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>;
   }
@@ -307,7 +301,7 @@ function ExpenseSection({ caseId }: { caseId: string }) {
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-semibold flex items-center gap-2">
           <Receipt className="w-5 h-5" />
-          Expenses ({expenses.length}) — Total: &#8377;{totalExpenses.toFixed(0)}
+          Expenses ({expenses.length})
         </h3>
         <Button size="sm" onClick={() => { resetForm(); setShowForm(true); }}>
           <Plus className="w-4 h-4 mr-2" /> Add Expense
@@ -356,9 +350,16 @@ function ExpenseSection({ caseId }: { caseId: string }) {
 
       {expenses.length === 0 && !showForm ? (
         <Card>
-          <CardContent className="py-8 text-center text-muted-foreground">
+          <CardContent className="py-8 text-center text-muted-foreground space-y-3">
             <DollarSign className="w-10 h-10 mx-auto mb-3 opacity-30" />
-            <p>No expenses recorded. Track filing fees, courier costs, travel, and other case expenses.</p>
+            <p>No expenses recorded yet.</p>
+            <p className="text-xs">Track filing fees, courier, travel, and other court-related spend.</p>
+            <div>
+              <Button size="sm" onClick={() => { resetForm(); setShowForm(true); }}>
+                <Plus className="w-4 h-4 mr-2" />
+                Add First Expense
+              </Button>
+            </div>
           </CardContent>
         </Card>
       ) : (

@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from typing import List
 
 from app.database import get_db
-from app.models import User, Case, Draft, Document
+from app.models import User, Case, Draft, Document, AnalysisResult
 from app.schemas.draft import DraftRequest, DraftResponse, DraftTemplateResponse
 from app.utils.auth import get_current_user
 from app.utils.llm import generate_legal_draft
@@ -52,16 +52,37 @@ async def generate_draft(
         except (json.JSONDecodeError, TypeError):
             pass
 
+    confirmed_fields = request.confirmed_fields or {}
+    selected_loophole_ids = set(request.selected_loophole_ids or [])
+    selected_results = []
+    if selected_loophole_ids:
+        selected_results = db.query(AnalysisResult).filter(
+            AnalysisResult.case_id == case.id,
+            AnalysisResult.id.in_(list(selected_loophole_ids)),
+        ).all()
+
+    selected_grounds = [
+        {
+            "id": item.id,
+            "title": item.title,
+            "description": item.description,
+            "guidance": item.guidance,
+        }
+        for item in selected_results
+    ]
+
     content = generate_legal_draft(
         template_id=request.template_id,
-        case_title=case.title or "",
-        case_number=case.case_number or "",
-        court=case.court or "",
-        case_type=case.case_type or "",
+        case_title=confirmed_fields.get("case_title") or case.title or "",
+        case_number=confirmed_fields.get("case_number") or case.case_number or "",
+        court=confirmed_fields.get("court") or case.court or "",
+        case_type=confirmed_fields.get("case_type") or case.case_type or "",
         document_context=doc_context,
-        applicable_sections=applicable_sections,
-        client_name=case.client_name or "",
-        opposing_counsel=case.opposing_counsel or "",
+        applicable_sections=confirmed_fields.get("applicable_sections") or applicable_sections,
+        client_name=confirmed_fields.get("client_name") or case.client_name or "",
+        opposing_counsel=confirmed_fields.get("opposing_counsel") or case.opposing_counsel or "",
+        confirmed_fields=confirmed_fields,
+        selected_grounds=selected_grounds,
     )
 
     template_names = {t.id: t.name for t in TEMPLATES}

@@ -6,10 +6,12 @@ from app.config import get_settings
 settings = get_settings()
 
 connect_args = {}
-if settings.DATABASE_URL.startswith("sqlite"):
+database_url = settings.resolved_database_url
+
+if database_url.startswith("sqlite"):
     connect_args["check_same_thread"] = False
 
-engine = create_engine(settings.DATABASE_URL, echo=settings.DEBUG, connect_args=connect_args)
+engine = create_engine(database_url, echo=settings.DEBUG, connect_args=connect_args)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
